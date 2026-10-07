@@ -16,6 +16,9 @@ Maya grew out of [Strata](https://github.com/Niko1221/Strata) (MIT): its engine 
 for GLM-5.3-Flash (the expert tiers across VRAM, RAM and SSD, the two-GPU split, MTP decoding), and its server and
 dashboard started from Strata's and were reworked for Maya (a new dashboard, images on demand, the thinking budget).
 
+This branch also adds an **experimental Linux AMD path for RX 7900 XT / XTX**
+using system ROCm 7, one GPU, and text input. See [AMD Maya setup and validation](docs/AMD_MAYA.md).
+
 ## The model: Maya-S
 
 Maya installs **Maya-S**, Project Maya's own compact quant of GLM-5.3-Flash (96.5 GB,

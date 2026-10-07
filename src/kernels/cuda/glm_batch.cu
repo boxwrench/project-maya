@@ -9,7 +9,9 @@
 
 #include <cuda_fp16.h>
 #include <cuda_runtime.h>
+#if !defined(STRATA_USE_HIP)
 #include <mma.h>
+#endif
 
 #include <algorithm>
 #include <atomic>
@@ -419,7 +421,14 @@ __global__ void __launch_bounds__(1024) dsa_select_kernel(const float* __restric
 // MLA attention for a chunk: block = (token, 16 heads).  The token's cells are walked in chunks of 32 latent rows
 // (loaded into shared memory once for the 16 heads), with an online softmax per head; thread c owns the context
 // columns c and c + 256 of all 16 heads.
-constexpr int MB_HG = 16, MB_CH = 32;
+constexpr int MB_HG = 16;
+#if defined(STRATA_USE_HIP)
+// RDNA has 64 KiB LDS per workgroup. The CUDA 32-row tile needs 66 KiB
+// before static shared storage; 16 rows leave room for the online softmax.
+constexpr int MB_CH = 16;
+#else
+constexpr int MB_CH = 32;
+#endif
 __global__ void __launch_bounds__(256) mla_attn_kernel(const float* __restrict__ q_abs, const uint16_t* __restrict__ lat,
                                                        const int* __restrict__ cells_all, const int* __restrict__ n_sel_arr,
                                                        int n_sel_max, int n_head, float scale, float* __restrict__ ctx) {
@@ -484,12 +493,12 @@ __global__ void __launch_bounds__(256) mla_attn_kernel(const float* __restrict__
 #pragma unroll
         for (int hh = 0; hh < 2; ++hh) {
             const int h = 2 * warp + hh;
-            const float v = sP[h * MB_CH + lane];
+            const float v = lane < MB_CH ? sP[h * MB_CH + lane] : -INFINITY;
             const float m_old = s_m[h];
             const float m_new = fmaxf(m_old, warp_max(v));
             const float e = (v == -INFINITY) ? 0.0f : expf(v - m_new);
             const float l = warp_sum(e);
-            sP[h * MB_CH + lane] = e;
+            if (lane < MB_CH) sP[h * MB_CH + lane] = e;
             __syncwarp();
             if (lane == 0) {
                 const float sc = (m_old == -INFINITY) ? 0.0f : expf(m_old - m_new);
@@ -526,6 +535,7 @@ __global__ void __launch_bounds__(256) mla_attn_kernel(const float* __restrict__
     }
 }
 
+#if !defined(STRATA_USE_HIP)
 // The same attention on the tensor cores (sm_70+): block = (token, 16 heads), 8 warps.  The token's cells are walked
 // in chunks of 32: their latent rows go to FP16 in shared memory, the scores S = Q16 . L^T come from the tensor cores
 // (two 16-cell tiles, the K = 512 split in four quarters across the warps and summed), the softmax is the online one
@@ -646,6 +656,8 @@ __global__ void __launch_bounds__(256) mla_attn_tc_kernel(const float* __restric
         o[i] = L > 0.0f ? sO[i] / L : 0.0f;
     }
 }
+
+#endif
 
 // ---------------------------------------------------------------- the NextN block's caches over a prompt
 // h[t] = rms(mean_s R[t][s]) * w (the final hidden state the draft block reads; head_prep's arithmetic)
@@ -973,7 +985,9 @@ void mla_attn(const float* q_abs, const uint16_t* lat, const int* cells, const i
     const size_t smem = ((size_t) MB_CH * 512 + (size_t) MB_HG * MB_CH) * sizeof(float);
     // per device: the F32 kernel's smem opt-in done; the tensor-core kernel's: 0 untried, 1 ok, -1 refused (Turing)
     static bool attr[16] = {};
+#if !defined(STRATA_USE_HIP)
     static int tc_ok[16] = {};
+#endif
     int dev = 0;
     cudaGetDevice(&dev);
     if (dev < 0 || dev >= 16) dev = 0;
@@ -981,6 +995,8 @@ void mla_attn(const float* q_abs, const uint16_t* lat, const int* cells, const i
         cudaFuncSetAttribute(mla_attn_kernel, cudaFuncAttributeMaxDynamicSharedMemorySize, (int) smem);
         attr[dev] = true;
     }
+    const dim3 grid((unsigned) T, (unsigned) (n_head / MB_HG));
+#if !defined(STRATA_USE_HIP)
     // STRATA_GLM_PREFILL_ATTN=f32: the F32 kernel (A/B); STRATA_GLM_PREFILL_ATTN_CHECK=1 (debug): both, compared
     static const bool f32_only = [] {
         const char* v = getenv("STRATA_GLM_PREFILL_ATTN");
@@ -996,7 +1012,6 @@ void mla_attn(const float* q_abs, const uint16_t* lat, const int* cells, const i
         std::fprintf(stderr, "glm_batch: CUDA%d prompt attention on the %s\n", dev,
                      tc_ok[dev] > 0 && !f32_only ? "tensor cores" : "F32 cores");
     }
-    const dim3 grid((unsigned) T, (unsigned) (n_head / MB_HG));
     if (tc_ok[dev] > 0 && !f32_only) {
         mla_attn_tc_kernel<<<grid, 256, kTcSmem, s>>>(q_abs, lat, cells, n_sel, n_sel_max, n_head, scale, ctx);
         check("mla_attn_tc");
@@ -1029,6 +1044,7 @@ void mla_attn(const float* q_abs, const uint16_t* lat, const int* cells, const i
         }
         return;
     }
+#endif
     mla_attn_kernel<<<grid, 256, smem, s>>>(q_abs, lat, cells, n_sel, n_sel_max, n_head, scale, ctx);
     check("mla_attn");
 }
