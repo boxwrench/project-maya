@@ -1,0 +1,72 @@
+# Shared AMD backport audit
+
+Compared Maya `70e0746` plus this branch's GLM HIP port with Strata
+[`d5ea713`](https://github.com/Niko1221/Strata/tree/d5ea7133741e67743c0e886bb426c0ce8d69cf6c).
+The publication fixes below belong to the companion handoff-fix contribution.
+The listed tests use the two contributions together. Full-model inference
+remains unverified; broader backend updates require their own GLM validation.
+
+## Publication fixes applied
+
+Strata [issue #697](https://github.com/Niko1221/Strata/issues/697) reports that
+the mapped-memory doorbell store can remain invisible to the CPU until stream
+synchronization on gfx1201. Upstream uses a volatile ring store and a HIP-only
+`__threadfence_system()` after the store in both shared doorbell kernels.
+Maya now has those changes. The earlier payload fences remain.
+
+Maya's `glm_fast.cu` has a separate routing request ring. Its `rq->seq` is
+already volatile, but also lacked a post-store fence. The same HIP-only fence
+now follows that signal. This is an application of the same publication rule
+to Maya's code, not a copied Qwen kernel.
+
+Validation on native Linux / system ROCm 7.2.1:
+
+| Check | RX 7900 XT, gfx1100 | AI PRO R9700, gfx1201 |
+| --- | --- | --- |
+| Shared handoff: 100 CPU waits, 100 copy/rings, 100 fused publishes | Passed | Passed |
+| Actual GLM routing graph: 100 disk requests and 100 CPU-lane requests | Passed | Passed |
+| Selected engine/GPU suite | 14/14 passed | Not run as a full engine build yet |
+| 321B model request | Not verified | Not run |
+
+R9700 tests use separate binaries compiled from the current kernel sources;
+they do not enable R9700 in `maya.py` or establish full-model support. Logs:
+`build-hip/pr-kernel-tests.log`, `doorbell-handoff-gfx1201.log`,
+`glm-handoff-gfx1100.log`, and `glm-handoff-gfx1201.log`.
+
+## Further integration requirements
+
+| Shared component | Upstream change and integration requirement |
+| --- | --- |
+| `cmake/hip_backend.cmake` | Architecture lists include maintainer-validated gfx1100/gfx1201; pass the compiled architecture list to the runtime check. |
+| `src/core/device.cu` and `include/strata/core/device.hpp` | Match against architectures actually compiled into the binary, check wave32, and expose device-list diagnostics. Update with CMake, rather than removing the current architecture check alone. |
+| `include/strata/hip_compat/` | Use the upstream headers as the base, retaining Maya's GLM mappings for occupancy, stream legacy, profiling, SGEMM/batched SGEMM, error codes and `__grid_constant__`. Replacing them without those additions breaks GLM compilation. |
+| `intrinsics.hpp` | Upstream adds RDNA4 dot4, byte permutation, packed-byte arithmetic and older-HIP warp synchronization. Validate the packed-byte operations and GLM reference tests on both cards. |
+| AMD setup detection | Backport the Linux detection changes needed by these two discrete GPUs, accurate names and mockable sysfs access. Upstream's entire installer also has unrelated Qwen, Windows and APU logic. |
+| hipBLASLt table loader and tables | Preserve architecture/version checks. GLM has a separate prompt path, described below. |
+
+The runtime query `hipblasLtGetVersion` on this host returns `100202`, or
+**1.2.2**, and the installed header agrees. This is the value the loader
+compares, regardless of a package's version label. Upstream includes both
+`gfx1100-hipblaslt-100202.txt` and `gfx1201-hipblaslt-100202.txt`.
+
+Maya's GLM dense prompt products in `src/core/glm_prefill.cu` call SGEMM,
+batched SGEMM and GEMM Ex through hipBLAS. Its quantized expert products use
+GGML MMQ. The existing hipBLASLt tuning loader is in the inherited Qwen
+prefill GEMM path (`src/prefill/gemm.cu`); copying a table or setting
+`STRATA_HIPBLASLT_TUNING` does not redirect GLM's calls to that path.
+Using these tables for GLM requires a compatible dispatch implementation,
+matching matrix shapes, and numerical/performance checks against the existing
+GLM path. No throughput benefit is claimed from table availability alone.
+
+## Compiler and model boundaries
+
+Strata [issue #1180](https://github.com/Niko1221/Strata/issues/1180) concerns
+its fused native expert prompt kernel and `waves_per_eu(8)`. That source is
+absent from Maya, and no such setting was found in Maya's source tree. It is
+not a reason to disable Maya's different GLM kernels without evidence.
+The synthetic GPU checks do not establish full-model quantized-expert
+or draft verification correctness. The first real request remains necessary.
+
+Strata [issue #1389](https://github.com/Niko1221/Strata/issues/1389) measures
+Qwen prompt performance. Its profiling and tuning method is useful once GLM
+runs; its token rates are not Maya benchmarks.
