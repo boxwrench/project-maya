@@ -1,7 +1,7 @@
-# Experimental Maya on RX 7900 XT / XTX
+# Experimental Maya on RX 7900 XT / XTX and R9700 / RX 9070
 
 This branch adds a Linux HIP build and installer path for Maya's GLM-5.3-Flash
-engine on `gfx1100`. It uses one GPU and serves text. Images and HIP multi-GPU
+engine on `gfx1100` and `gfx1201`. It uses one GPU and serves text. Images and HIP multi-GPU
 inference are not enabled by this installer.
 
 Use a system ROCm 7 installation with its HIP compiler and hipBLAS, Python
@@ -20,7 +20,10 @@ The first setup downloads about 96.5 GB of weights and verifies the SHA-256
 hash of each shard. `--gguf-dir DIR` uses existing files instead. GPU numbers
 are the kernel KFD topology order shown by `--check`; on the test machine the
 7900 XT is GPU 0, an R9700 is GPU 1, and the integrated GPU is GPU 2. This
-build accepts only `gfx1100`. Configs are named `maya-<quant>-hip.json` and
+installer accepts `gfx1100` and `gfx1201` and compiles one binary for
+`gfx1100;gfx1201;gfx1151`. The last target **builds, untested**: it is not
+enabled by setup until the separate unified-memory work is validated.
+Configs are named `maya-<quant>-hip.json` and
 select the AMD device through `HIP_VISIBLE_DEVICES`.
 
 The HIP config starts with an 8K context when requested above, a 256-token
@@ -55,7 +58,7 @@ so Strata's model benchmarks do not establish Maya performance.
 ## Validation
 
 Test host: RX 7900 XT 20 GiB, Ryzen 7 9800X3D, 192 GB installed DDR5, native
-Ubuntu Linux, system ROCm 7.2.1 / Clang 22. Maya base revision `70e0746` (1.3.0).
+Ubuntu Linux, system ROCm 7.2.1 / Clang 22, plus AI PRO R9700 32 GiB. Maya base revision `70e0746` (1.3.0).
 
 The HIP engine and selected test targets build. All 14 selected GPU checks
 pass: device allocation, expert upload staging, packed-byte/shuffle
@@ -75,9 +78,13 @@ FP16 latent cache added in Maya 1.3.0.
 The GLM handoff test replays the real routing graph for 100 disk requests
 and 100 CPU-lane requests with changing IDs, weights, inputs and answers. The
 CPU observes each request without a driver query or stream synchronization.
-Both this test and the shared 300-round handoff test also pass on the R9700
-using isolated `gfx1201` binaries; the normal Maya installer still targets
-`gfx1100` pending full-model validation. See [the shared AMD backport audit](AMD_UPSTREAM.md).
+The same multi-architecture engine and test build pass all 14 checks on the
+7900 XT and R9700. HC1 and HC2 also pass on the R9700. The HIP intrinsics check
+covers all 65,536 pairs of byte values with varying neighboring lanes and
+permutation selectors, against per-byte CPU references. The runtime rejects
+the uncompiled `gfx1036` integrated GPU with the actual device and compiled
+architecture list in its message. See [R9700 build details](AMD_RDNA4.md) and
+[the shared AMD backport audit](AMD_UPSTREAM.md).
 
 ```sh
 python3 tools/test_maya_hip.py

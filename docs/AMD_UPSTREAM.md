@@ -25,24 +25,24 @@ Validation on native Linux / system ROCm 7.2.1:
 | --- | --- | --- |
 | Shared handoff: 100 CPU waits, 100 copy/rings, 100 fused publishes | Passed | Passed |
 | Actual GLM routing graph: 100 disk requests and 100 CPU-lane requests | Passed | Passed |
-| Selected engine/GPU suite | 14/14 passed | Not run as a full engine build yet |
+| Same multi-architecture engine/GPU suite | 14/14 passed | 14/14 passed |
 | 321B model request | Not verified | Not run |
 
-R9700 tests use separate binaries compiled from the current kernel sources;
-they do not enable R9700 in `maya.py` or establish full-model support. Logs:
-`build-hip/pr-kernel-tests.log`, `doorbell-handoff-gfx1201.log`,
-`glm-handoff-gfx1100.log`, and `glm-handoff-gfx1201.log`.
+Both cards now use the same `gfx1100;gfx1201;gfx1151` build. HC1/HC2 pass on
+the R9700; `gfx1151` builds, untested. The installer enables the two discrete
+architectures. These checks do not establish full-model correctness or speed.
+See [AMD_RDNA4.md](AMD_RDNA4.md) for build and validation commands.
 
 ## Further integration requirements
 
 | Shared component | Upstream change and integration requirement |
 | --- | --- |
-| `cmake/hip_backend.cmake` | Architecture lists include maintainer-validated gfx1100/gfx1201; pass the compiled architecture list to the runtime check. |
-| `src/core/device.cu` and `include/strata/core/device.hpp` | Match against architectures actually compiled into the binary, check wave32, and expose device-list diagnostics. Update with CMake, rather than removing the current architecture check alone. |
+| `cmake/hip_backend.cmake` | Applied: upstream architecture lists, semicolon/space parsing, and compiled architecture metadata. Normalization also removes empty entries and duplicates before compiler use. |
+| `src/core/device.cu` and `include/strata/core/device.hpp` | Applied: exact base-architecture checks against the compiled list, wave32 check, and actual/build architecture diagnostics. Broader upstream device-list helpers are separate. |
 | `include/strata/hip_compat/` | Use the upstream headers as the base, retaining Maya's GLM mappings for occupancy, stream legacy, profiling, SGEMM/batched SGEMM, error codes and `__grid_constant__`. Replacing them without those additions breaks GLM compilation. |
-| `intrinsics.hpp` | Upstream adds RDNA4 dot4, byte permutation, packed-byte arithmetic and older-HIP warp synchronization. Validate the packed-byte operations and GLM reference tests on both cards. |
-| AMD setup detection | Backport the Linux detection changes needed by these two discrete GPUs, accurate names and mockable sysfs access. Upstream's entire installer also has unrelated Qwen, Windows and APU logic. |
-| hipBLASLt table loader and tables | Preserve architecture/version checks. GLM has a separate prompt path, described below. |
+| `intrinsics.hpp` | Applied: upstream RDNA4 dot4 guard, byte permutation, SWAR byte operations and older-HIP warp synchronization. Packed-byte and GLM reference checks pass on both discrete cards. |
+| AMD setup detection | Applied: gfx1201 eligibility and fallback name; Maya uses the shared supported-architecture list. Unified-memory detection and wider installer helper consolidation are separate. |
+| hipBLASLt table loader and tables | Added upstream gfx1201 tables for versions 100202/100500. The loader keeps its architecture/version checks; GLM has a separate prompt path, described below. |
 
 The runtime query `hipblasLtGetVersion` on this host returns `100202`, or
 **1.2.2**, and the installed header agrees. This is the value the loader
