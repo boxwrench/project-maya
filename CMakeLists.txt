@@ -461,7 +461,7 @@ if(STRATA_ENABLE_CUDA OR STRATA_ENABLE_HIP)
 
   add_executable(glm_model_test src/core/glm_model_test.cpp)
   target_include_directories(glm_model_test PRIVATE ${_strata_gpu_include_directories})
-  target_link_libraries(glm_model_test PRIVATE strata_engine ${_strata_gpu_runtime_target})
+  target_link_libraries(glm_model_test PRIVATE strata_prefill ${_strata_gpu_runtime_target})   # the GLM prompt GEMMs use strata::prefill::Gemm
   add_test(NAME glm_model_test COMMAND glm_model_test --selftest)
   set_tests_properties(glm_model_test PROPERTIES WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
 

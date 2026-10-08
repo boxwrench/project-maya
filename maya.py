@@ -1011,8 +1011,18 @@ def write_config(a, pc, meta, pack: Path, quant: str, ctx: int, data: Path, visi
         cfg["backend"] = "hip"
         # Leave space for the Linux desktop. The engine sizes its prompt chunk from
         # the available prompt-memory budget; forcing 256 here severely slows HIP.
-        env = {"STRATA_GLM_SPLIT": "0", "STRATA_GLM_RESERVE_MB": "3072",
-               "STRATA_GLM_RAM_HEADROOM_GB": "16", **env}
+        hip_env = {"STRATA_GLM_SPLIT": "0", "STRATA_GLM_RESERVE_MB": "3072", "STRATA_GLM_RAM_HEADROOM_GB": "16"}
+        g = pc["gpus"][0]
+        # Larger prompt sub-batches feed the matrix cores much better (7900 XT: ~250 -> ~410 tok/s); they need
+        # a bigger prompt budget, borrowed from the expert pool only while a prompt runs.
+        if g.get("vram_gb", 0) >= 20:
+            hip_env.update({"STRATA_GLM_PREFILL_SUB": "1024", "STRATA_GLM_PREFILL_MB": "4096"})
+        # The prompt projections' hipBLASLt solutions measured on this architecture (tools/hip). The engine
+        # refuses a table made for another hipBLASLt version and keeps plain hipBLAS.
+        tables = sorted((ROOT / "tools" / "hip").glob(f"{g.get('arch', '')}-glm-hipblaslt-*.txt"))
+        if tables:
+            hip_env["STRATA_HIPBLASLT_TUNING"] = str(tables[-1])
+        env = {**hip_env, **env}
     if env:
         cfg["env"] = env
     if a.host:

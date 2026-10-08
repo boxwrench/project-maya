@@ -26,12 +26,45 @@ enabled by setup until the separate unified-memory work is validated.
 Configs are named `maya-<quant>-hip.json` and
 select the AMD device through `HIP_VISIBLE_DEVICES`.
 
-The HIP config starts with an 8K context when requested above, a 256-token
-prompt chunk, 3 GiB of GPU headroom, and 16 GiB of system-RAM headroom. The
-example additionally caps the pinned expert cache at 60 GiB. Change those
-settings with `--env KEY=VALUE` during setup. Available RAM, rather than
-installed RAM, determines how much can be cached. The engine reduces its
-RAM-tier allocation if ROCm cannot pin the requested amount.
+The HIP config starts with an 8K context when requested above, 3 GiB of GPU
+headroom, and 16 GiB of system-RAM headroom. The engine sizes the prompt chunk
+from its prompt-memory budget. The example additionally caps the pinned expert
+cache at 60 GiB. Change those settings with `--env KEY=VALUE` during setup.
+Available RAM, rather than installed RAM, determines how much can be cached.
+The engine reduces its RAM-tier allocation if ROCm cannot pin the requested
+amount.
+
+## Prompt speed
+
+Prompts run in chunks, and inside a chunk the mixers and the dense FFN run in
+sub-batches. Two settings matter on AMD:
+
+- `STRATA_GLM_PREFILL_SUB` sets the sub-batch size. It was a fixed 256; it is
+  now a runtime setting with 256 as the default. Larger sub-batches give the
+  matrix cores bigger GEMMs. Setup writes `1024` together with
+  `STRATA_GLM_PREFILL_MB=4096` for cards with 20 GB or more; the extra prompt
+  memory is borrowed from the expert pool only while a prompt runs.
+- `STRATA_HIPBLASLT_TUNING` points at a table of hipBLASLt solutions for the
+  prompt's FP16 projections, measured per architecture with
+  `tools/hip/tune_hipblaslt` (`tools/hip/<arch>-glm-hipblaslt-<version>.txt`).
+  Setup writes it when a table for the card exists. The engine accepts a table
+  only for its own architecture and hipBLASLt version; otherwise, and for shapes
+  without a row, it keeps plain hipBLAS. The tuner's absolute-error gate now
+  scales with `sqrt(K / 4096)`, so long-K projections are no longer rejected.
+
+Measured prompt speed, GLM-5.3-Flash Maya-S-v2 IQ2_XXS, ROCm 7.2:
+
+| Setting | RX 7900 XT | Ryzen AI Max+ 395 (8060S) | R9700 |
+|---|---|---|---|
+| prompt chunk forced to 256 (the earlier config) | ~50 tok/s | ~70 | - |
+| engine-sized chunk | ~198 | ~116 | - |
+| + tuned hipBLASLt | ~253-259 | ~195 | - |
+| + `STRATA_GLM_PREFILL_SUB=1024`, `STRATA_GLM_PREFILL_MB=4096` | ~413 | ~217 | ~490-560 |
+
+The 8060S runs used the same prompt-path changes on a local build. The R9700
+runs used a pinned RAM tier sized for every expert the VRAM pool does not hold. On
+gfx1201, plain hipBLAS is already close to hipBLASLt for most shapes, so its
+table keeps only the rows that were at least 2% faster.
 
 ## What changed
 

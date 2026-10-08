@@ -75,6 +75,21 @@ class HipSetupTests(unittest.TestCase):
         self.assertEqual(cfg["exe"], str(self.root / "build-hip/strata"))
         self.assertNotIn("vision", cfg)
 
+    def test_config_prompt_defaults_and_tuning_table(self):
+        tables = self.root / "tools/hip"
+        tables.mkdir(parents=True)
+        (tables / "gfx1100-glm-hipblaslt-100202.txt").write_text("STRATA_HIPBLASLT_TUNING_V1 gfx1100 100202\n")
+        (tables / "gfx1201-glm-hipblaslt-100202.txt").write_text("STRATA_HIPBLASLT_TUNING_V1 gfx1201 100202\n")
+        pc = maya.check_pc(self.a)
+        self.a.env = ["STRATA_GLM_PREFILL_SUB=512"]
+        p = maya.write_config(self.a, pc, {"lib_dirs": [str(self.rocm / "lib")]},
+                              self.root / "pack", "test", 8192, self.root / "data", None)
+        env = json.loads(p.read_text())["env"]
+        self.assertNotIn("STRATA_GLM_PREFILL_CHUNK", env)
+        self.assertEqual(env["STRATA_GLM_PREFILL_SUB"], "512")   # the user's setting wins
+        self.assertEqual(env["STRATA_GLM_PREFILL_MB"], "4096")
+        self.assertEqual(env["STRATA_HIPBLASLT_TUNING"], str(tables / "gfx1100-glm-hipblaslt-100202.txt"))
+
     def test_hip_build_enables_mmq_and_never_cuda(self):
         pc = maya.check_pc(self.a)
         maya.BUILD.mkdir()
