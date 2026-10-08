@@ -17,6 +17,8 @@ set(_strata_hip_unvalidated gfx1010 gfx1011 gfx1012 gfx1102 gfx1103 gfx1030 gfx1
 # CMake hands HIP a ';' list, but a -DCMAKE_HIP_ARCHITECTURES typed by hand (or ROCm's own Windows tooling) may use
 # spaces, which foreach(IN LISTS) would otherwise treat as one element.
 string(REPLACE " " ";" _strata_hip_norm "${CMAKE_HIP_ARCHITECTURES}")
+list(FILTER _strata_hip_norm EXCLUDE REGEX "^$")
+list(REMOVE_DUPLICATES _strata_hip_norm)
 set(STRATA_HIP_ARCH_LIST "")
 foreach(_arch IN LISTS _strata_hip_norm)
   if(_arch STREQUAL "")
