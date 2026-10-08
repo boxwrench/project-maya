@@ -698,7 +698,7 @@ def cuda_lib_dirs():
 
 
 # ------------------------------------------------------------------------------------------------ AMD (experimental)
-# The RX 7900 XT / XTX (gfx1100) on Linux, through the HIP backend (docs/AMD_HIP.md).  There is no ready-made AMD
+# The RX 7900 XT / XTX (gfx1100) and RX 9070 / R9700 (gfx1201) on Linux, through the HIP backend (docs/AMD_HIP.md).  There is no ready-made AMD
 # engine: ROCm comes from AMD's TheRock Python wheels into .venv (no sudo; a system ROCm in /opt/rocm is used when it
 # has hipcc and hipBLAS) and the engine is compiled here.  One GPU, no images yet.
 ROCM_INDEX = os.environ.get("STRATA_ROCM_INDEX", "https://rocm.nightlies.amd.com/v2/gfx110X-dgpu/")
@@ -1691,7 +1691,7 @@ def main() -> int:
             say(f"    GPU {g['index']}: {g['name']}, {g['vram_gb']:.0f} GB VRAM - " + (amd_problem(g) or "can be used"))
         usable = [g for g in amd if amd_problem(g) is None]
         if not usable:
-            fail("no AMD GPU Strata can use", "the AMD backend runs on the RX 7900 XT / XTX (gfx1100) on Linux")
+            fail("no AMD GPU Strata can use", "the Maya AMD backend targets gfx1100/gfx1201 on Linux with system ROCm 7")
         if a.gpus:
             fail("several GPUs sharing one model: NVIDIA only for now", "use one AMD card (--gpu N)")
         if a.gpu is not None:
