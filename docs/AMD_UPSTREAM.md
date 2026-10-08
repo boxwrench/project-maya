@@ -41,21 +41,21 @@ See [AMD_RDNA4.md](AMD_RDNA4.md) for build and validation commands.
 | `include/strata/hip_compat/` | Use the upstream headers as the base, retaining Maya's GLM mappings for occupancy, stream legacy, profiling, SGEMM/batched SGEMM, error codes and `__grid_constant__`. Replacing them without those additions breaks GLM compilation. |
 | `intrinsics.hpp` | Applied: upstream RDNA4 dot4 guard, byte permutation, SWAR byte operations and older-HIP warp synchronization. Packed-byte and GLM reference checks pass on both discrete cards. |
 | AMD setup detection | Applied: gfx1201 eligibility and fallback name; Maya uses the shared supported-architecture list. Unified-memory detection and wider installer helper consolidation are separate. |
-| hipBLASLt table loader and tables | Added upstream gfx1201 tables for versions 100202/100500. The loader keeps its architecture/version checks; GLM has a separate prompt path, described below. |
+| hipBLASLt table loader and tables | Added upstream gfx1201 tables for versions 100202/100500. The loader keeps its architecture/version checks. Maya's GLM prompt projections now reuse that loader with separate per-architecture GLM tables. |
 
 The runtime query `hipblasLtGetVersion` on this host returns `100202`, or
 **1.2.2**, and the installed header agrees. This is the value the loader
 compares, regardless of a package's version label. Upstream includes both
 `gfx1100-hipblaslt-100202.txt` and `gfx1201-hipblaslt-100202.txt`.
 
-Maya's GLM dense prompt products in `src/core/glm_prefill.cu` call SGEMM,
-batched SGEMM and GEMM Ex through hipBLAS. Its quantized expert products use
-GGML MMQ. The existing hipBLASLt tuning loader is in the inherited Qwen
-prefill GEMM path (`src/prefill/gemm.cu`); copying a table or setting
-`STRATA_HIPBLASLT_TUNING` does not redirect GLM's calls to that path.
-Using these tables for GLM requires a compatible dispatch implementation,
-matching matrix shapes, and numerical/performance checks against the existing
-GLM path. No throughput benefit is claimed from table availability alone.
+Maya's GLM dense prompt products in `src/core/glm_prefill.cu` still use SGEMM
+and batched SGEMM through hipBLAS where appropriate. Its FP16 prompt
+projections now reuse the inherited hipBLASLt loader in `src/prefill/gemm.cu`
+when `STRATA_HIPBLASLT_TUNING` names a matching GLM table. Shapes absent from
+the table fall back to GEMM Ex through hipBLAS, and the quantized expert path
+continues to use GGML MMQ. The GLM tables were tuned and checked separately for
+gfx1100, gfx1151 and gfx1201; the inherited Qwen tables are not interchangeable
+with them.
 
 ## Compiler and model boundaries
 

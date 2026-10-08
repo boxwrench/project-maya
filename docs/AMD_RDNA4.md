@@ -67,11 +67,12 @@ env -u ROCR_VISIBLE_DEVICES LD_LIBRARY_PATH=/opt/rocm/lib HIP_VISIBLE_DEVICES=1 
 
 Both cards pass 14/14 GPU checks; HC1/HC2 also pass on the R9700. The intrinsics
 test compares signed dot4, overflow, shuffles, and 65,536 packed-byte pairs and
-permutations to CPU references. Five setup tests and five architecture-parser
+permutations to CPU references. Six setup tests and five architecture-parser
 tests pass. Selecting the uncompiled gfx1036 iGPU is refused before a kernel
 launch. CUDA was not compile-checked because the test host has no `nvcc`.
 
 The copied gfx1201 hipBLASLt tables match versions `100202` and `100500`.
-They serve the inherited tuning loader; Maya's GLM dense prompt path currently
-uses hipBLAS and its expert path uses GGML MMQ. The tables alone do not change
-GLM performance. No model throughput claim is made.
+They serve the inherited tuning loader. Maya's GLM prompt projections can now
+use the separate `gfx1201-glm-hipblaslt-100202.txt` table through that loader;
+shapes without a tuned row continue through hipBLAS. Its quantized expert path
+still uses GGML MMQ.
