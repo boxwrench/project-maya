@@ -25,6 +25,7 @@ class HipSetupTests(unittest.TestCase):
         self.gpus = [
             {"index": 0, "arch": "gfx1100", "vendor": "amd", "name": "RX 7900 XT", "vram_gb": 20},
             {"index": 1, "arch": "gfx1201", "vendor": "amd", "name": "R9700", "vram_gb": 32},
+            {"index": 2, "arch": "gfx1036", "vendor": "amd", "name": "iGPU", "vram_gb": 1},
         ]
         for ctx in (
             patch.object(maya, "ROOT", self.root),
@@ -46,14 +47,14 @@ class HipSetupTests(unittest.TestCase):
         self.a = SimpleNamespace(backend="hip", gpu=0, gpus=None, no_vision=False, env=[],
                                  port=8099, host=None, api_key=None, gguf_dir=None)
 
-    def test_selects_7900_not_larger_unsupported_card(self):
+    def test_selects_larger_supported_discrete_card(self):
         self.a.gpu = None
         pc = maya.check_pc(self.a)
-        self.assertEqual(pc["gpus"], [self.gpus[0]])
+        self.assertEqual(pc["gpus"], [self.gpus[1]])
         self.assertEqual(maya.EXE, self.root / "build-hip/strata")
 
     def test_rejects_unsupported_card_and_multi_gpu(self):
-        self.a.gpu = 1
+        self.a.gpu = 2
         with self.assertRaises(SystemExit):
             maya.check_pc(self.a)
         self.a.gpu = 0
@@ -84,7 +85,7 @@ class HipSetupTests(unittest.TestCase):
         self.assertIn("-DSTRATA_ENABLE_HIP=ON", conf)
         self.assertIn("-DSTRATA_ENABLE_CUDA=OFF", conf)
         self.assertIn("-DSTRATA_PREFILL_MMQ=ON", conf)
-        self.assertIn("-DCMAKE_HIP_ARCHITECTURES=gfx1100", conf)
+        self.assertIn("-DCMAKE_HIP_ARCHITECTURES=gfx1100;gfx1201;gfx1151", conf)
         self.assertEqual(env["ROCM_PATH"], str(self.rocm))
         self.assertEqual(meta["backend"], "hip")
 

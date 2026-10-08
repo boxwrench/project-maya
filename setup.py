@@ -703,8 +703,9 @@ def cuda_lib_dirs():
 # has hipcc and hipBLAS) and the engine is compiled here.  One GPU, no images yet.
 ROCM_INDEX = os.environ.get("STRATA_ROCM_INDEX", "https://rocm.nightlies.amd.com/v2/gfx110X-dgpu/")
 ROCM_VERSION = os.environ.get("STRATA_ROCM_VERSION", "7.10.0a20251120")   # what Strata's HIP build was tested with
-AMD_ARCHS = ("gfx1100",)
-AMD_NAMES = {"gfx1100": "AMD Radeon RX 7900 series (gfx1100)"}   # when sysfs has no product name
+AMD_ARCHS = ("gfx1100", "gfx1201")
+AMD_NAMES = {"gfx1100": "AMD Radeon RX 7900 series (gfx1100)",
+             "gfx1201": "AMD Radeon RX 9070 / AI PRO R9700 (gfx1201)"}   # when sysfs has no product name
 
 
 def amd_gpus():
@@ -744,7 +745,7 @@ def amd_gpus():
 
 def amd_problem(g):
     if g["arch"] not in AMD_ARCHS:
-        return (f"not supported - Strata's AMD backend runs on the RX 7900 XT / XTX ({', '.join(AMD_ARCHS)}) only, "
+        return (f"not supported - Strata's AMD backend runs on the supported discrete cards ({', '.join(AMD_ARCHS)}), "
                 f"this is {g['arch']}")
     return None
 
