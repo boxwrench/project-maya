@@ -1,10 +1,9 @@
 # Shared AMD backport audit
 
-Compared Maya `70e0746` plus this branch's GLM HIP port with Strata
+Compared Maya v1.0.4 (`70e0746`) plus this branch's GLM HIP port with Strata
 [`d5ea713`](https://github.com/Niko1221/Strata/tree/d5ea7133741e67743c0e886bb426c0ce8d69cf6c).
-The publication fixes below belong to the companion handoff-fix contribution.
-The listed tests use the two contributions together. Full-model inference
-remains unverified; broader backend updates require their own GLM validation.
+The publication fixes below were merged in v1.0.7 (#2). Broader backend
+updates require their own GLM validation.
 
 ## Publication fixes applied
 

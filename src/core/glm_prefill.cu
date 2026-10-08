@@ -21,7 +21,9 @@
 #include "strata/kernels/dequant_bf16.hpp"
 #include "strata/kernels/glm_batch.hpp"
 #include "strata/kernels/iq_kernels.hpp"
+#if defined(STRATA_USE_HIP)
 #include "strata/prefill/gemm.hpp"
+#endif
 #include "strata/prefill/moe_mmq.hpp"
 
 #include "ggml.h"
@@ -192,8 +194,10 @@ struct Glm5Model::PrefillState {
     int max_pools = 0;
     cublasHandle_t blas = nullptr;
     void* ws = nullptr;
-    std::unique_ptr<strata::prefill::Gemm> lt;
+#if defined(STRATA_USE_HIP)
+    std::unique_ptr<strata::prefill::Gemm> lt;   // hipBLASLt with a tuning table (STRATA_HIPBLASLT_TUNING)
     bool lt_tried = false;
+#endif
     std::unique_ptr<mmq::Context> mq;
     uint8_t* arena = nullptr;
     size_t arena_bytes = 0;

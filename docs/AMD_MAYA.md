@@ -75,13 +75,14 @@ table keeps only the rows that were at least 2% faster.
   and hipBLAS.
 - Replaced the GLM hyper-connection kernel's unsupported FP32 `__ldcg` with
   agent-scope acquire loads on HIP. CUDA keeps its existing implementation.
-- Kept CUDA WMMA attention guarded to CUDA builds. HIP uses the FP32 attention
-  path with a 16-row tile that fits RDNA's 64 KiB workgroup shared-memory limit.
+- Kept CUDA WMMA attention guarded to CUDA builds. HIP uses the F32 attention
+  kernel; since v1.0.7 its 32-row tile keeps the latent rows FP16 in shared
+  memory (34 KB), within RDNA's 64 KiB workgroup limit.
 - Fixed the KDA parity fixture to initialize its recurrence state explicitly;
   its numerical tolerance is unchanged.
-- A companion handoff-fix contribution backports Strata's HIP post-store
-  system fence in both shared doorbell kernels and Maya's fused routing
-  signal. The validation below includes that companion change.
+- The HIP post-store system fences in both shared doorbell kernels and Maya's
+  fused routing signal (backported from Strata) arrived separately in v1.0.7
+  (#2); the validation below includes them.
 
 Upstream Strata was inspected at `d5ea713` (0.1.40.3). Its AMD backend documents
 runtime selection, memory limits, desktop VRAM headroom, and newer packed-byte
@@ -91,22 +92,22 @@ so Strata's model benchmarks do not establish Maya performance.
 ## Validation
 
 Test host: RX 7900 XT 20 GiB, Ryzen 7 9800X3D, 192 GB installed DDR5, native
-Ubuntu Linux, system ROCm 7.2.1 / Clang 22, plus AI PRO R9700 32 GiB. Maya base revision `70e0746` (1.3.0).
+Ubuntu Linux, system ROCm 7.2.1 / Clang 22, plus AI PRO R9700 32 GiB. Maya base v1.0.10 (`e4bd57e`).
 
 The HIP engine and selected test targets build. All 14 selected GPU checks
 pass: device allocation, expert upload staging, packed-byte/shuffle
 intrinsics, asynchronous mapped-memory handoff, IQ1_S arithmetic, GLM
 hyper-connections, KDA, FFN, DSA, layer arithmetic, synthetic-model logits
-against the committed reference, and HIP MMQ. Five isolated installer tests
-passed. The fused HC decode kernel also agrees with the independent CPU
+against the committed reference, and HIP MMQ. Six isolated installer tests
+pass. The fused HC decode kernel also agrees with the independent CPU
 reference across eight consecutive 4096-wide steps, including in-place gate
 updates, in all three variants (default HC3, forced HC2, and forced HC1).
-This is not yet an end-to-end test of the 321B model.
+The full-model runs are below.
 
 The real batched MLA attention kernel agrees with a double-precision CPU
 softmax reference (absolute tolerance `5e-5`), including empty and masked cell
 lists, partial and multiple tiles, and multiple head groups. It reads the
-FP16 latent cache added in Maya 1.3.0.
+FP16 latent cache added in Maya v1.0.4.
 
 The GLM handoff test replays the real routing graph for 100 disk requests
 and 100 CPU-lane requests with changing IDs, weights, inputs and answers. The
@@ -131,5 +132,11 @@ STRATA_GLM_HC1=1 LD_LIBRARY_PATH=/opt/rocm/lib HIP_VISIBLE_DEVICES=0 \
 ```
 
 The relevant build targets must be built before running CTest. Build and test
-logs are kept in `build-hip/`. Full-model startup and response testing are the
-next validation step; no Maya throughput number is claimed here.
+logs are kept in `build-hip/`.
+
+Full model (Maya-S, 8K context) on the RX 7900 XT with the config setup writes:
+seven smoke requests (arithmetic, code, a two-turn conversation, three
+400-token answers) and five back-to-back prompt+answer rounds complete, with
+prompts at 307-385 tok/s on 1.8-2.5K-token prompts and the hipBLASLt table
+loaded. The R9700 runs the full model with every expert in VRAM or a pinned
+RAM tier; the prompt speeds above were measured there.

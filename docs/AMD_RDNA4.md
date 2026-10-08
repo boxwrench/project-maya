@@ -4,7 +4,8 @@ The Linux HIP installer accepts RX 7900 XT/XTX (`gfx1100`) and RX 9070 /
 Radeon AI PRO R9700 (`gfx1201`). It uses one GPU, text input, and system ROCm 7.
 The shared backend changes come from Strata
 [`d5ea713`](https://github.com/Niko1221/Strata/tree/d5ea7133741e67743c0e886bb426c0ce8d69cf6c).
-Full-model inference remains unverified on the R9700.
+The R9700 runs the full model (Maya-S, about 20 tok/s answers and 490-560 tok/s
+prompts, every expert in VRAM or a pinned RAM tier).
 
 ```sh
 ./maya.sh --backend hip --gpu 1 --check
@@ -44,8 +45,7 @@ cmake --build build-multi --target strata strata-device hip_expert_cache_staging
   glm_model_test hip_prefill_mmq_parity -j 3
 ```
 
-The handoff target and the tested publication fences are in the companion
-fixes change.
+The handoff target and the tested publication fences were merged in v1.0.7 (#2).
 
 ## Validation
 
