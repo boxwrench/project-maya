@@ -5,8 +5,12 @@ RX 7900 XT come second.
 
 ## Now
 
-- **Fix the RAM-shadow crash (#15).** It shows up on v1.0.14 within a few requests, so it can be bisected. Background
-  promotions are the first suspect.
+- **Validate the RAM-shadow ownership fix (#15).** The crash reproduces on one card during a later prompt, but both
+  failing logs had zero background promotions. The remaining lead is prompt lending: it made duplicate RAM copies and
+  later reclaimed slots without proving they owned the key's active mapping. Experimental commit `7646b6b` on
+  `exp/ram-shadow-debug` (Maya v1.0.16) fixes both paths. It has passed a low-RAM 1,024-boundary R9700 stress run; repeat
+  the original 90 GB test after the existing 7900 XT worker releases system RAM, where shadows actually survive between
+  prompts.
 - **Expert tiers on a single R9700: measured.** RAM-resident tier + `PROMOTE_MIN=6` (+ #24) gives 23.4 -> 25.55 tok/s
   (+9%) with zero disk reads. Earlier notes on this item: The R9700's 32 GB holds only part of the 86 GB of experts, so decode depends on
   how experts move between VRAM, RAM and SSD. Under test together:

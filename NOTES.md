@@ -67,6 +67,14 @@ unchanged (the same tokens on V100s) before merging. Nothing was merged on an AI
   That was wrong. It is a real bug in the RAM-shadow option (#15), and on Maya v1.0.14 it reproduces on one card within
   a few requests, always in the prefill of a new request. Lesson: "it went away for 80 rounds" isn't a root cause. Keep
   the failing configuration and bisect it.
+- **RAM-shadow fault isolation (v1.0.16 follow-up).** Both captured failures reported zero background promotions, so
+  the promotion worker is not required to trigger the fault. The repeated prompt-lend path copied experts that already
+  had RAM shadows into new host slots and left boundary GC to reconcile the duplicates. Some eviction paths could then
+  clear `ram_of`/`rtab` even when the physical slot they reclaimed was an obsolete duplicate. Experimental commit
+  `7646b6b` in `/tmp/maya-shadow-debug` reuses an existing shadow and only clears mappings owned by the reclaimed slot.
+  It builds for gfx1100/gfx1201/gfx1151. A constrained 20 GB R9700 run passed ten requests and 1,024 decode boundaries,
+  but that tier was too small to retain shadows between prompts, so the original 90 GB reproducer still has to validate
+  the fix.
 - **Greedy output that differs between runs on HIP.** Expert placement decides which experts the CPU computes, and that
   changes floating-point rounding. Compare runs by coherence and acceptance, not exact text, unless you pin the tiers.
 
