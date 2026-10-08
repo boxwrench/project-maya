@@ -1009,9 +1009,10 @@ def write_config(a, pc, meta, pack: Path, quant: str, ctx: int, data: Path, visi
     env = parse_env(a.env)
     if pc.get("backend") == "hip":
         cfg["backend"] = "hip"
-        # Leave space for the Linux desktop and start with a modest prompt chunk.
+        # Leave space for the Linux desktop. The engine sizes its prompt chunk from
+        # the available prompt-memory budget; forcing 256 here severely slows HIP.
         env = {"STRATA_GLM_SPLIT": "0", "STRATA_GLM_RESERVE_MB": "3072",
-               "STRATA_GLM_RAM_HEADROOM_GB": "16", "STRATA_GLM_PREFILL_CHUNK": "256", **env}
+               "STRATA_GLM_RAM_HEADROOM_GB": "16", **env}
     if env:
         cfg["env"] = env
     if a.host:
