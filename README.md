@@ -23,8 +23,8 @@ is the answer speed.
 
 | Setup | Prefill | Decode | Notes |
 |---|---|---|---|
-| RX 7900 XT (20 GB) | ~415 tok/s | ~15 tok/s | 16.4 with faster expert kernels ([#19](https://github.com/mw00/project-maya/pull/19)); 18.5 with RAM shadows ([#15](https://github.com/mw00/project-maya/pull/15)) |
-| AI PRO R9700 (32 GB) | ~500-620 tok/s | ~20 tok/s | range across our test runs; tier tuning under test |
+| RX 7900 XT (20 GB) | ~415 tok/s | ~15 tok/s | 16.4 with faster expert kernels ([#19](https://github.com/mw00/project-maya/pull/19)); ~19 with RAM shadows ([#15](https://github.com/mw00/project-maya/pull/15), on hold) |
+| AI PRO R9700 (32 GB) | ~500-620 tok/s | ~23-25.5 tok/s | 25.5 with the community tier PRs #24-#26 (RAM-resident tier + PROMOTE_MIN) |
 | Strix Halo (128 GB unified) | ~215 tok/s, ~251 with [#16](https://github.com/mw00/project-maya/pull/16) | ~17.8 tok/s | every expert fits in GPU memory |
 | R9700 + RX 7900 XT | ~490 tok/s | ~34-36 tok/s | MTP drafts on the second card, ~76% accepted |
 
@@ -56,7 +56,7 @@ notes.
 | [#2](https://github.com/mw00/project-maya/pull/2) | HIP memory fences for the GPU-to-CPU handoff | merged |
 | [#7](https://github.com/mw00/project-maya/pull/7) | Linux HIP setup, R9700, faster prompts (hipBLASLt tables, bigger sub-batches) | merged, v1.0.11 |
 | [#14](https://github.com/mw00/project-maya/pull/14) | Two GPUs with MTP drafting; one hipBLASLt table per card | merged, v1.0.14 |
-| [#15](https://github.com/mw00/project-maya/pull/15) | Opt-in RAM shadows: about 3x fewer SSD reads | approved; re-measuring on v1.0.14 |
+| [#15](https://github.com/mw00/project-maya/pull/15) | Opt-in RAM shadows: about 3x fewer SSD reads | on hold: crash found on v1.0.14, debugging |
 | [#16](https://github.com/mw00/project-maya/pull/16) | rocWMMA prompt attention + FP16 MLA (Strix prompts +16%) | being merged |
 | [#17](https://github.com/mw00/project-maya/pull/17) | Strix Halo: unified-memory sizing, installer support | approved; rebased |
 | [#18](https://github.com/mw00/project-maya/pull/18) | `--bench` / `--report` on AMD | being merged |

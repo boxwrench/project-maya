@@ -63,8 +63,10 @@ unchanged (the same tokens on V100s) before merging. Nothing was merged on an AI
 
 ## Things that looked like bugs and weren't
 
-- **An intermittent GPU memory fault on two GPUs.** It happened while another process was using the cards and never
-  again in ~80 clean rounds. Check `rocm-smi --showpids` before blaming the engine.
+- **A correction.** An intermittent GPU memory fault on two GPUs was first put down to another process using the cards.
+  That was wrong. It is a real bug in the RAM-shadow option (#15), and on Maya v1.0.14 it reproduces on one card within
+  a few requests, always in the prefill of a new request. Lesson: "it went away for 80 rounds" isn't a root cause. Keep
+  the failing configuration and bisect it.
 - **Greedy output that differs between runs on HIP.** Expert placement decides which experts the CPU computes, and that
   changes floating-point rounding. Compare runs by coherence and acceptance, not exact text, unless you pin the tiers.
 

@@ -5,7 +5,10 @@ RX 7900 XT come second.
 
 ## Now
 
-- **Expert tiers on a single R9700.** The R9700's 32 GB holds only part of the 86 GB of experts, so decode depends on
+- **Fix the RAM-shadow crash (#15).** It shows up on v1.0.14 within a few requests, so it can be bisected. Background
+  promotions are the first suspect.
+- **Expert tiers on a single R9700: measured.** RAM-resident tier + `PROMOTE_MIN=6` (+ #24) gives 23.4 -> 25.55 tok/s
+  (+9%) with zero disk reads. Earlier notes on this item: The R9700's 32 GB holds only part of the 86 GB of experts, so decode depends on
   how experts move between VRAM, RAM and SSD. Under test together:
   - our RAM shadows ([#15](https://github.com/mw00/project-maya/pull/15))
   - the community's RAM-resident tier ([#25](https://github.com/mw00/project-maya/pull/25))
