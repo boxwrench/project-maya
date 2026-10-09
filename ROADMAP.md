@@ -42,7 +42,7 @@ RX 7900 XT come second.
 | Idea | Why not |
 |---|---|
 | Single-GPU MTP speculation | **Reopened and being measured:** first measure expert overlap and single-card draft cost. Consecutive tokens share only ~30% of their experts (#26's data), so verifying two tokens may cost almost twice the expert reads. The earlier 1.1-1.2x estimate needs a fresh Strix measurement. |
-| Fused int8 WMMA prompt MoE | Ported and correct, but no end-to-end gain on the R9700 or RX 7900 XT so far. |
+| Fused int8 WMMA prompt MoE (from [Strata](https://github.com/Niko1221/Strata)) | Ported and correct, but no end-to-end gain on the R9700 or RX 7900 XT so far. |
 | llama.cpp's RDNA4 MMQ patch ([#25940](https://github.com/ggml-org/llama.cpp/pull/25940)) | No repeatable gain for Maya's IQ formats. |
 | Shared expert on a second stream (Strix) | Correct, identical output, but within noise (17.2 vs 17.9 tok/s). |
 | HIP graphs for decode | Tiny kernels are only ~5% of a Strix token; the time is in reading weights. |
