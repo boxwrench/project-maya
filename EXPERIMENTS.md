@@ -39,9 +39,9 @@ not controlled studies.
 | E08 | Prompt speed | amd_iommu=off on Strix Halo | KEPT |
 | E09 | Prompt speed | --prefill auto (PR #44) on Strix Halo | OPEN |
 | E10 | Prompt speed | Why 256-token prompts are slow | DROPPED |
-| E11 | Prompt speed | Terminal-layer prefix work in single-GPU prefill | OPEN |
+| E11 | Prompt speed | Terminal-layer prefix skip in single-GPU prefill | KEPT-OPEN |
 | E12 | Decode speed | Faster decode expert kernels on RDNA3/3.5 | KEPT |
-| E13 | Decode speed | Decode expert kernels for RDNA4 (R9700) | OPEN |
+| E13 | Decode speed | Decode expert kernels for RDNA4 (R9700) | DROPPED |
 | E14 | Decode speed | CPU expert lane plans (two GPUs) | DROPPED |
 | E15 | Decode speed | Shared expert on a second stream (Strix) | DROPPED |
 | E16 | Decode speed | HIP graphs for decode | DROPPED |
@@ -59,13 +59,15 @@ not controlled studies.
 | E28 | Stability | HIP doorbell publication and KDA test initialisation | FIXED |
 | E29 | Stability | First attribution of the memory fault: interference (wrong) | FIXED |
 | E30 | Stability | Root causes of the illegal memory access, and the fix (#39) | KEPT-OPEN |
-| E31 | Stability | Rebasing #38 and #39 onto v1.0.21 | OPEN |
+| E31 | Stability | Rebasing #38 and #39 onto v1.0.21 and v1.0.23 | KEPT-OPEN |
 | E32 | Stability | #44 breaks the HIP build (#52) | FIXED |
 | E33 | Long context | Long prompts on one R9700, before the fix | FIXED |
 | E34 | Long context | KV ring (#41) and 64K context on Strix Halo | KEPT |
 | E35 | Quality | Quality of Maya on AMD | OPEN |
 | E36 | Comparisons with other projects | OpenMOSE Strata-GLM-AMD (their numbers) | OPEN |
 | E37 | Comparisons with other projects | Other engines: halogen-flash-server and glm53-flash-offload | OPEN |
+| E38 | Prompt speed | R9700 prefill sub-batch 1024, 2048 and 4096 | DROPPED |
+| E39 | Decode speed | Single-R9700 decode regression on upstream builds | OPEN |
 
 ## Prompt speed
 
@@ -131,29 +133,29 @@ On Strix Halo f16q measured 251 tok/s against 237-247 for wmma2 at 4-7K prompts,
 
 **Caveats.** Two requests per cell. After the rebase the parity numbers have not been re-run on a GPU (build only). Strix comparison range is from the PR text, no raw file found.
 
-**Evidence.** [#38](https://github.com/mw00/project-maya/pull/38); [#41](https://github.com/mw00/project-maya/pull/41); local evidence: /ai/github/Maya-data/agent-tools/results/sol-rebase-38-39.md
+**Evidence.** [#38](https://github.com/mw00/project-maya/pull/38); [#41](https://github.com/mw00/project-maya/pull/41); local evidence: /ai/github/Maya-data/agent-tools/results/sol-rebase-38-39.md; local evidence: /ai/github/Maya-data/agent-tools/results/muse-local-integration.md
 
 ### E04 - Fused WMMA prompt MoE on Strix Halo (OPEN)
 
-**Question.** Does a fused WMMA prompt-MoE path speed up prompts on gfx1151?
+**Question.** Does a fused WMMA prompt-MoE path speed up prompts on gfx1151, and is its output correct?
 
-**Setup.** Strix Halo 8060S (gfx1151), 128 GB unified; v1.0.16 + uncommitted fused files (branch exp/fused-moe-gfx1151), ROCm 10.2 build, hipBLASLt table 100500. Same binary, environment switch only, prompts of 4K, 8K, 16K and one 300-token decode.
+**Setup.** Strix Halo 8060S (gfx1151, 128 GB unified); fused branch on v1.0.16 (746ee3f), commit 4b480f7 on exp/fused-moe-gfx1151, ROCm 10.2 build (TheRock 10.2.0a20261009, AMD clang 24), hipBLASLt table gfx1151-glm-hipblaslt-100500. Maya-S v2 IQ2_XXS pack, context 65536, prefill sub-batch 4096, prefill budget 12288 MB. Same binary; only STRATA_GLM_PREFILL_FUSED=1 versus 0 changes. Fresh servers, ON then OFF; prompts of about 4K, 8K and 16K tokens, 32 output tokens, temperature 0, three paired requests per size.
 
-**Result.** | case | ON | OFF | delta |
+**Result.** Parity is fixed. The gfx11 epilogue lacked the SwiGLU clamp that the gfx12 path has. On the iq2_xxs/q2_0 pair (clamp limit 1.25), fused versus MMQ relative L2 went from 31.05 to 8.7e-8. All 48 fused parity cases pass; fused versus MMQ ranges from 8.7e-8 to 1.0e-4 across them. Prompt A/B, medians of three (fused ON versus MMQ OFF):
+
+| prompt | ON tok/s | OFF tok/s | delta |
 |---|---|---|---|
-| prompt 4K | 337.9 | 311.4 | +8.5% |
-| prompt 8K | 341.1 | 322.6 | +5.8% |
-| prompt 16K | 339.2 | 323.0 | +5.0% |
-| decode 200 | 18.2 | 17.3 | noise |
+| ~4K | 335.9 | 296.7 | +13.2% |
+| ~8K | 340.0 | 316.2 | +7.5% |
+| ~16K | 333.7 | 318.5 | +4.8% |
 
-`hip_prefill_fused_parity` FAIL (31.1x; bit-identical on ROCm 7.2 and 10.2, so a kernel bug). The other three parity tests pass. Suspected cause: the gfx11 epilogue lacks the SwiGLU clamp the gfx12 path has. Spot checks were coherent.
+A 556-token prompt with 200-token decode measured 18.1 ON and 18.0 OFF (noise, as expected for a prefill-only change). The earlier run, made before the fix and with parity failing, was one request per cell at +8.5% (4K), +5.8% (8K) and +5.0% (16K); it is not usable as a result.
 
-**Decision.** Not adopted: the fused parity test fails (31.1x). Next: add the SwiGLU clamp the gfx12 path has, remove debug prints, re-run parity, re-A/B. Likely causes: a missing SwiGLU clamp and/or WMMA operand order (OpenMOSE notes activations must be the first operand); unconfirmed.
+**Decision.** Fixed and measured on Strix (gfx1151). Not yet PR'd: the commit needs a rebase onto current upstream. The gfx11 runtime gate admits gfx1151 only. The RX 7900 XT (gfx1100) keeps MMQ; enabling it needs a gfx1100 kernel image, an allowlist entry, and its own parity and A/B runs on that card.
 
-**Caveats.** Single request per cell. Parity fails, so the speed result is not usable yet. Decode delta (18.2 vs 17.3) is called noise in the report; the path is prefill-only.
+**Caveats.** Three repeats per size, run sequentially, with no confidence interval; prompt sizes differ from the earlier run. Greedy text is not byte-identical between ON and OFF (floating-point and quantization differences). The coherence checks are smoke tests, not a quality evaluation. No gfx1100 or gfx12 hardware run.
 
-**Evidence.** local evidence: /ai/github/Maya-data/agent-tools/results/muse-fused-nimo.md
-
+**Evidence.** local evidence: /ai/github/Maya-data/agent-tools/results/sol-fused-gfx11.md; local evidence: /ai/github/Maya-data/agent-tools/results/muse-fused-nimo.md (earlier run)
 ### E05 - Strata's fused int8 WMMA prompt MoE on discrete cards (OPEN)
 
 **Question.** Does the port of Strata's fused int8 WMMA MoE help the R9700 or RX 7900 XT?
@@ -162,7 +164,7 @@ On Strix Halo f16q measured 251 tok/s against 237-247 for wmma2 at 4-7K prompts,
 
 **Result.** Parity passed; no repeatable end-to-end prompt gain. No numbers survive.
 
-**Decision.** Codex's port of Strata's fused int8 WMMA prompt-MoE (RDNA4 path) passed parity but gave no repeatable end-to-end prompt gain on the R9700 or RX 7900 XT. On Strix (gfx11 path) it gives +5-8.5% but its parity test fails (see E04). Open pending the E04 fix.
+**Decision.** Codex's port of Strata's fused int8 WMMA prompt-MoE (RDNA4 path) passed parity but gave no repeatable end-to-end prompt gain on the R9700 or RX 7900 XT. On Strix (gfx11 path) it gives +5-8.5% but its parity test fails (see E04). Open. The E04 gfx11 parity fix is now measured on Strix (see E04); the discrete-card result has not been re-run.
 
 **Caveats.** Discrete-card result is from the coordinator's notes; no raw numbers or files survived (lost in a reboot). Date is an estimate.
 
@@ -258,19 +260,44 @@ Decode and expert pool unchanged (80.17 GB, 288 slots per layer). The maintainer
 
 **Evidence.** local evidence: Maya field-study lead ledger (LEADS.md) / SUPPRESSIONS.md; local evidence: /ai/github/Maya-data/benchmarks/20261008-v1011-2gpu/summary.md
 
-### E11 - Terminal-layer prefix work in single-GPU prefill (OPEN)
+### E11 - Terminal-layer prefix skip in single-GPU prefill (KEPT-OPEN)
 
-**Question.** Is the last layer's FFN for prefix rows wasted when MTP is not loaded?
+**Question.** Is the last layer's attention output projection and FFN wasted work for prefix rows when MTP is not loaded, and can it be skipped without changing output?
 
-**Setup.** n/a; source review of v1.0.x. None run.
+**Setup.** Strix Halo 8060S (gfx1151, 128 GB unified), one GPU; upstream v1.0.23 (eadd3b6), ROCm 10.2 build, commit 2de6962 on perf/terminal-layer-skip. Correctness: prompts of 220, 1,122 and 2,682 tokens, context 4096, prefill chunk 512, a fresh model load per comparison with all experts in the GPU pool, 64 greedy steps. Speed: prompts of about 4K, 8K and 16K tokens, context 65536, one greedy output token, one request per size and mode, fresh servers, sub-batch 4096, prefill budget 12288 MB. The skip is on by default; STRATA_GLM_PREFILL_TAIL_SKIP=0 restores the full computation. It is disabled when the trunk is not all on one device, when a NextN block is loaded, and when a seam dump directory is set.
 
-**Result.** No measurement.
+**Result.** Byte-identical with the skip on and off: all 192 greedy token IDs, all 29,736,960 logits, every prefill cache dump, and each saved and restored snapshot, over 21 files per mode (2.13 GB). With a NextN block forced on (control, 220-token prompt, 64 steps), the output, state and snapshot were also byte-identical, which confirms the guard. Prompt speed, one request per size:
 
-**Decision.** A lead from a Codex source review; nothing built or measured.
+| prompt | actual tokens | skip off tok/s | skip on tok/s | gain |
+|---|---:|---:|---:|---:|
+| ~4K | 4,162 | 302.0 | 305.7 | +1.20% |
+| ~8K | 8,315 | 319.5 | 322.9 | +1.06% |
+| ~16K | 16,561 | 316.1 | 318.5 | +0.75% |
 
-**Caveats.** Unverified source reading; the 1-2% is an estimate (about 1/42 of prompt MoE work). A surviving consumer of those rows would kill it.
+**Decision.** KEPT-OPEN. The gain is small but in the same direction at all three sizes. A PR is pending an R9700 check. An earlier comparison that reused one loaded model for three prompts differed on prompt 2, first in layer 7's DSA latent cache, before the skipped layer. The fresh-load comparison removed that placement effect without a tolerance.
 
-**Evidence.** local evidence: Maya field-study lead ledger (LEADS.md) (MG-L005)
+**Caveats.** One request per size and mode, so these are observations, not an estimate of a stable speedup. Multi-request output is not promised byte-identical when adaptive expert placement is allowed to change. No NVIDIA build or timing: the skip sits in shared host code and so applies to eligible CUDA single-GPU prefill, but its benefit there is unmeasured. Not measured on two GPUs; split exclusion was checked from the guard and both hop consumers.
+
+**Evidence.** local evidence: /ai/github/Maya-data/agent-tools/results/codex-mgl005.md
+### E38 - R9700 prefill sub-batch 1024, 2048 and 4096 (DROPPED)
+
+**Question.** Does a larger prefill sub-batch (1024, 2048 or 4096) speed up prompts on one R9700?
+
+**Setup.** R9700 (gfx1201, 32 GB), single GPU, RAM tier 48 GB, PROMOTE_MIN 6, context 40960; integration build (v1.0.23 + #39 + #38) with the gfx1201 hipBLASLt table. Prefill probes: one request each at about 4K, 8K, 16K and 28K prompt tokens, 16 output tokens. Decode probe: 1600 tokens, 256 output, n=2. Sub-batch was the only change.
+
+**Result.** Prompt tok/s, one sample per cell:
+
+| sub-batch | 4K | 8K | 16K | 28K | decode tok/s (n=2) |
+|---|---:|---:|---:|---:|---|
+| 1024 | 709.4 | 794.5 | 758.2 | 798.9 | 15.5 / 20.6 |
+| 2048 | 717.4 | 787.5 | 744.3 | 797.9 | 16.2 / 20.6 |
+| 4096 | 728.1 | 686.1 | 763.3 | 757.0 | 16.4 / 20.4 |
+
+**Decision.** DROPPED. 1024 and 2048 are within noise at every size. 4096 reads lower at 8K and 28K. Decode is flat across the three arms.
+
+**Caveats.** One sample per cell. The 4096 dips at 8K and 28K are suggestive, not conclusive. In each decode pair the first value is slower (warm-up).
+
+**Evidence.** local evidence: /ai/github/Maya-data/agent-tools/results/muse-r9700-subsweep.md; receipts under /ai/github/Maya-data/agent-tools/results/receipts/ (muse-sub1024, muse-sub2048, muse-sub4096)
 
 ## Decode speed
 
@@ -300,20 +327,28 @@ All parity checks bit-identical.
 
 **Evidence.** [#19](https://github.com/mw00/project-maya/pull/19)
 
-### E13 - Decode expert kernels for RDNA4 (R9700) (OPEN)
+### E13 - Decode expert kernels for RDNA4 (R9700) (DROPPED)
 
 **Question.** Can the gfx1201 expert kernels be tuned the way #19 did for gfx1100?
 
-**Setup.** R9700 (gfx1201); branch amd/hip-expert-kernels-rdna4 on v1.0.16. Goal stated in the brief: make gate_up<16>, down<22>, down<18> as fast as possible while bit-identical to the originals.
+**Setup.** R9700 (gfx1201, 32 GB), ROCm 7.2.1 Release build on upstream v1.0.23 (commit f7415b9 on a local branch); single GPU, RAM tier 48 GB, PROMOTE_MIN 6. Selected gfx1201 variants: gate_up<16> direct LDS; down<22> direct LDS with 4 rows; down<18> direct LDS with 2 rows. Only the measured geometry (n_embd 4096, n_ff 2048) and types 16, 22 and 18 changed.
 
-**Result.** No result recorded.
+**Result.** Kernel level, bit-identical to the originals (R9700 sweep 620/620 and RX 7900 XT 620/620, max_abs 0):
 
-**Decision.** Open; a Codex agent (Luna) is running it. No result yet.
+| kernel | original us/call | selected us/call | speedup |
+|---|---:|---:|---:|
+| gate_up<16> / down22 | 92.152 | 75.624 | 1.219x |
+| down<22> / IQ2_S | 60.428 | 46.821 | 1.291x |
+| gate_up<16> / down18 | 91.999 | 75.299 | 1.222x |
+| down<18> / IQ3_XXS | 58.853 | 50.005 | 1.177x |
 
-**Caveats.** No result exists in the records I read. Date is the brief's file time, an estimate.
+Full-model single-R9700 decode, four measured requests per arm after two warm-ups: optimized 21.98 tok/s mean (21.3 to 22.4) against legacy 21.75 (21.4 to 22.1), about +1.0%.
 
-**Evidence.** local evidence: /ai/github/Maya-data/agent-tools/briefs/luna-rdna4-experts.md; hub ROADMAP.md; coordinator session notes, 2026-10-08/09
+**Decision.** DROPPED (parked). The per-kernel win does not reach end-to-end decode on the R9700. No push was made.
 
+**Caveats.** The full-model comparison is one pair of four-request arms on one card. The brief's 28.1 tok/s v1.0.16 reference is a separate measurement and is not compared here. gfx1100 dispatch was left unchanged.
+
+**Evidence.** local evidence: /ai/github/Maya-data/agent-tools/results/luna-rdna4-experts.md; local evidence: /ai/github/Maya-data/agent-tools/briefs/luna-rdna4-experts.md
 ### E14 - CPU expert lane plans (two GPUs) (DROPPED)
 
 **Question.** Is the CPU computing part of the RAM-tier experts a net win, and is the automatic split the best?
@@ -379,17 +414,40 @@ The lane's 13.7 ms/token overlaps GPU work and removes PCIe fetches. Baseline co
 
 ### E18 - Single-GPU speculation on Strix Halo (OPEN)
 
-**Question.** Would MTP speculation on one card raise decode, given consecutive tokens share only ~30% of experts?
+**Question.** Would MTP speculation on one card raise decode? Measure its acceptance and draft cost first.
 
-**Setup.** Strix Halo 8060S (planned); n/a. None run.
+**Setup.** Strix Halo 8060S (gfx1151, 128 GB unified), one GPU; upstream v1.0.23 (eadd3b6) with an opt-in probe (STRATA_GLM_MTP_PROBE=1; commit 718eb10 on exp/mtp-accept-1gpu), ROCm 10.2 build. Four greedy 300-token continuations (chat, code, reasoning, prose) with probe on and off; context 65536; NextN loaded; a fresh engine for each run.
 
-**Result.** No measurement. The earlier 1.1-1.2x estimate is marked as needing a fresh measurement.
+**Result.** Greedy acceptance of the NextN draft: 900 of 1,196 comparisons, 75.25% overall (chat 72.2%, code 78.3%, reasoning 86.6%, prose 63.9%). Draft 3.82 ms against a normal decode step of 54.38 ms (draft overhead 7.0%). All 1,200 probe token IDs match the probe-off run. The two-token verify has not been built or timed. Cost model: if a two-token verify costs 1.2x a normal step, the estimated speedup is 1.38x. Break-even for the verify is 1.68x a normal step (about 91.5 ms). Two serial forwards would give about 0.85x.
 
-**Decision.** Measure expert overlap first; nothing built. External engine reports about +22% from a draft head on one machine.
+**Decision.** OPEN. Worth a K=1 verifier prototype if the two-token verify can share weight reads (dense and routed-expert reads). The prototype is being built; there is no speed result yet.
 
-**Caveats.** The 30% figure comes from #26's data, as quoted by the hub; the earlier 1.1-1.2x estimate is unverified. No Maya measurement.
+**Caveats.** Four prompts, one 300-token continuation each: a feasibility sample, not a workload estimate. The 1.2x verify cost is an assumption, based on a read-sharing hypothesis (about 10.2 GB versus 8.5 GB per step), not a measurement. Long-context acceptance is not measured. The earlier 1.1-1.2x estimate remains unverified.
 
-**Evidence.** hub ROADMAP.md; local evidence: /ai/github/Maya-data/agent-tools/results/openmose-next.md (section 3)
+**Evidence.** local evidence: /ai/github/Maya-data/agent-tools/results/codex-mtp-accept.md; hub ROADMAP.md; local evidence: /ai/github/Maya-data/agent-tools/results/openmose-next.md (section 3)
+### E39 - Single-R9700 decode regression on upstream builds (OPEN)
+
+**Question.** Why does single-R9700 decode fall from 28.1 tok/s on v1.0.16 to about 20.5 to 22 tok/s on later upstream builds?
+
+**Setup.** R9700 (gfx1201, 32 GB), single GPU, RAM tier 48 GB, PROMOTE_MIN 6. Reference: v1.0.16 (746ee3f), 28.1 tok/s (E22). Later builds: v1.0.23 integration (+ #39 + #38); #38 alone on b7b8d75; the legacy-kernel arm on the v1.0.23 base; and the sub-batch probe (E38).
+
+**Result.** Single-R9700 decode, tok/s:
+
+| build | decode tok/s |
+|---|---|
+| v1.0.16 (E22, two scored passes) | 28.1 |
+| v1.0.23 + #39 + #38, RAM 48 | about 22 |
+| #38 alone (b7b8d75), same protocol | about 21.8 |
+| v1.0.23 base, legacy expert kernels (four requests) | 21.75 |
+| sub-batch probe (E38, 1600-token prompt, 256 output, n=2) | 15.5 to 16.4, then 20.4 to 20.6 |
+
+On the R9700 with a 90 GB RAM tier the integration build gave 24.6 tok/s decode; dropping PROMOTE_MIN cost 4% decode (promotions rose from 6 to 33 per token).
+
+**Decision.** OPEN; cause under investigation. The suspect is VRAM reservations from #41 and #44 that reduce expert slots on this card. That has not been tested.
+
+**Caveats.** Few requests per arm. The v1.0.21 and v1.0.24 builds are not among the records read for this entry. The 28.1 figure comes from a different build and protocol, and the integration report says the old baselines do not reproduce even for #38 alone, so part of the gap may be a stale baseline.
+
+**Evidence.** local evidence: /ai/github/Maya-data/agent-tools/results/muse-local-integration.md; local evidence: /ai/github/Maya-data/agent-tools/results/luna-rdna4-experts.md; local evidence: /ai/github/Maya-data/agent-tools/results/muse-r9700-subsweep.md; E22 (local evidence: /ai/github/Maya-data/benchmarks/r9700-typical/REPORT.md)
 
 ## Expert tiers
 
@@ -585,22 +643,21 @@ Invalid-route injection (all and partial NaN/Inf on primary, predicted, lookahea
 
 **Caveats.** The run did not isolate which race caused each historical crash, nor trace the origin of every NaN; the 'before' counts were supplied, not rerun. Medians include the first request; long-prompt decode is 32 tokens. gfx1151 compiled, not hardware-tested; CUDA not built or run (shared code is exposed too). Default calibration used mixed CPU/GPU lanes and started no background moves; the all-CPU plan was needed to exercise race 2.
 
-**Evidence.** [#39](https://github.com/mw00/project-maya/pull/39); local evidence: /ai/github/Maya-data/agent-tools/results/codex-fix-result.md; local evidence: /ai/github/maya-ramcrash/verification/gpu-crash-final/summary.json; local evidence: /ai/github/Maya-data/agent-tools/results/sol-rebase-38-39.md
+**Evidence.** [#39](https://github.com/mw00/project-maya/pull/39); local evidence: /ai/github/Maya-data/agent-tools/results/codex-fix-result.md; local evidence: /ai/github/maya-ramcrash/verification/gpu-crash-final/summary.json; local evidence: /ai/github/Maya-data/agent-tools/results/sol-rebase-38-39.md; local evidence: /ai/github/Maya-data/agent-tools/results/muse-local-integration.md (re-verified on v1.0.23 + #39 + #38, incl. R9700 long-prompt repeats)
 
-### E31 - Rebasing #38 and #39 onto v1.0.21 (OPEN)
+### E31 - Rebasing #38 and #39 onto v1.0.21 and v1.0.23 (KEPT-OPEN)
 
-**Question.** Do the two open fixes still apply after #31, #41 and #44 merged?
+**Question.** Do the two open fixes still apply after #31, #41 and #44 merged, and do they work on GPU once rebased?
 
-**Setup.** CPU build only; upstream v1.0.21 (89a1336). Cherry-picked the three HIP device-query mappings first, then reapplied 251c113 and cbfb03e.
+**Setup.** First, a CPU build on upstream v1.0.21 (89a1336), with the three HIP device-query mappings cherry-picked first, then 251c113 and cbfb03e reapplied. Then an integration build on upstream v1.0.23 (eadd3b6) with #39 (6b6d520, merged locally as 4e180a4) and #38 (b7b8d75, as a03b840), all five targets, 147/147 steps. GPU checks on the RX 7900 XT (gfx1100) and R9700 (gfx1201), KV FP16 and INT8; dual-GPU arm at layer split 24.
 
-**Result.** Builds succeeded with warnings, no errors.
+**Result.** The v1.0.21 build succeeded with warnings only. The v1.0.23 integration build succeeded (warnings only). Parity 16/16 pass across both GPUs and both KV types: model error 2.56e-6 to 3.10e-6; wmma2 versus F32 3.4e-7 (gfx1100) and 1.6e-7 (gfx1201). Reproducers all pass: 7900 XT resident 12/12 (about 347 tok/s prefill, about 19 decode); R9700 long prompts 9/9 FP16 (8K about 796, 16K about 808, 28K about 814 tok/s prefill) and 9/9 INT8 (about 785, 799, 806). Dual GPU at split 24: 690 and 756 tok/s prefill at 4K and 8K (about 490 before), decode 34 to 40 tok/s. Against #38 alone on the same protocol, the integration is within 1% on both single-GPU arms.
 
-**Decision.** Both branches rebased and compile (strata, glm_layer_parity, glm_model_test, hip_glm_prefill_attention, hip_glm_handoff). No GPU run, no push. Parity and reproducers are queued.
+**Decision.** Both fixes apply after the rebase and pass the reproducers on GPU. #38 and #39 stay open upstream. The rebased PR branches were pushed 2026-10-09 and await a CUDA check.
 
-**Caveats.** Build only; no numerical result exists for the rebased code. Conflict resolution in #39 touches #31's speculative groups and #44's lending sizing; behaviour is unverified.
+**Caveats.** CUDA was not built or run for this rebase. The earlier R9700 baselines (800/830 prefill, 28.1 decode) do not reproduce under this protocol even for #38 alone, so they are a stale baseline, not a regression. The R9700 decode level is a separate open question (see E39). Single requests per long-prompt size.
 
-**Evidence.** local evidence: /ai/github/Maya-data/agent-tools/results/sol-rebase-38-39.md; [#38](https://github.com/mw00/project-maya/pull/38); [#39](https://github.com/mw00/project-maya/pull/39)
-
+**Evidence.** local evidence: /ai/github/Maya-data/agent-tools/results/sol-rebase-38-39.md; local evidence: /ai/github/Maya-data/agent-tools/results/muse-local-integration.md; [#38](https://github.com/mw00/project-maya/pull/38); [#39](https://github.com/mw00/project-maya/pull/39)
 ### E32 - #44 breaks the HIP build (#52) (FIXED)
 
 **Question.** Does upstream v1.0.20/21 with #41 + #44 build and run on AMD?
