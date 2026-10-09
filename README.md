@@ -78,6 +78,12 @@ than the SSD. With less RAM, decode is slower.
 
 ## Quality sanity check
 
+The shared single-GPU speculation prototype on Strix has an independently
+verified4x300 token match and observed21–23 tok/s, but its ON/OFF binaries
+differ, two timing-gate cells exceed1.4 and final-build test evidence is
+incomplete. It is not the everyday configuration or a claimed R9700 speedup;
+see [E47](EXPERIMENTS.md#e47---two-row-decode--single-gpu-speculation-prototype-open).
+
 One R9700, 128K INT8 config: GSM8K 37/40, MMLU-Pro 48/56, HumanEval 30/30,
 IFEval 29/40 strict (35/40 loose), tools 11/12. All 183 short-task cases completed
 without request errors or truncation. Writing was coherent but missed some explicit

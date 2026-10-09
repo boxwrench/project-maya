@@ -43,9 +43,13 @@ RX 7900 XT come second.
   expert-wise reuse already exist ([E45](EXPERIMENTS.md#e45---r9700-transfer-window-reuse-audit-dropped)).
   A future lead is profiling the nightly's prompt regression or expert-tier
   admission/exchange; neither has been launched. No repeat sub-batch sweep.
-- **Two-token decode step for single-GPU speculation.** Running two rows through the prompt path costs 8.2x a
-  decode step, so speculation needs purpose-built two-row decode kernels (dense GEMV sharing weight reads, two-row
-  experts and attention) at <= ~1.4x a step. Staged work with gates; stop at the first failed gate.
+- **Shared two-row decode prototype: promising, not ready to adopt.** Nimo's
+  completed implementation matches all4x300 ON/OFF tokens; observed21.1–23.4
+  versus18.4–18.5 tok/s. Independent audit finds two C2/T cells above1.4,
+  different ON/OFF binaries and missing final-build selftest evidence. See
+  [E47](EXPERIMENTS.md#e47---two-row-decode--single-gpu-speculation-prototype-open).
+  No default switch; gfx1201/gfx1100 untested. Future final-build/same-binary
+  validation is separate from the already-queued fused-v1026 validation.
 - **NIAH digit precision.** Long-context recall sometimes garbles exact digits (4817->4481) while multi-hop sums
   score 3/3 on the R9700. Quant precision is one hypothesis; the Strix FP16 sample used different needles and
   reported no misses, so the cause is not established. The short-task eval is a sanity baseline, not a controlled

@@ -75,6 +75,7 @@ not controlled studies.
 | E44 | Quality | NIAH recall garbles exact digits | OPEN |
 | E45 | Prompt speed | R9700 transfer-window reuse audit | DROPPED |
 | E46 | Runtime | R9700 isolated TheRock runtime comparison | DROPPED |
+| E47 | Shared decode | Two-row decode / single-GPU speculation prototype | OPEN |
 
 ## Prompt speed
 
@@ -427,7 +428,9 @@ The lane's 13.7 ms/token overlaps GPU work and removes PCIe fetches. Baseline co
 
 **Result.** Greedy acceptance of the NextN draft: 900 of 1,196 comparisons, 75.25% overall (chat 72.2%, code 78.3%, reasoning 86.6%, prose 63.9%). Draft 3.82 ms against a normal decode step of 54.38 ms (draft overhead 7.0%). All 1,200 probe token IDs match the probe-off run. The two-token verify has not been built or timed. Cost model: if a two-token verify costs 1.2x a normal step, the estimated speedup is 1.38x. Break-even for the verify is 1.68x a normal step (about 91.5 ms). Two serial forwards would give about 0.85x.
 
-**Decision.** OPEN. Worth a K=1 verifier prototype if the two-token verify can share weight reads (dense and routed-expert reads). The prototype is being built; there is no speed result yet.
+**Decision.** OPEN. The shared-weight two-row prototype now exists; E47 records
+its observed speed and verified token streams, but also borderline timing
+gates, different ON/OFF binaries and incomplete final-test evidence. No default switch.
 
 **Caveats.** Four prompts, one 300-token continuation each: a feasibility sample, not a workload estimate. The 1.2x verify cost is an assumption, based on a read-sharing hypothesis (about 10.2 GB versus 8.5 GB per step), not a measurement. Long-context acceptance is not measured. The earlier 1.1-1.2x estimate remains unverified.
 
@@ -918,6 +921,59 @@ misreported as numerical failures. No engine source changes.
 independent-audit.json, both outcomes, full requests/replies, receipts,
 library hashes, configs/CMake caches, parity/tuning logs and restored health.
 SDK/build logs under logs/r9700-rocm10-*. No new code push or PR.
+
+### E47 - Two-row decode / single-GPU speculation prototype (OPEN)
+
+**Question.** Can a shared-weight two-token verifier make single-GPU MTP pay,
+with portable implementation intended for both Strix Halo and R9700?
+
+**Setup.** Nimo gfx1151 only, v1.0.24-derived `exp/two-row-decode` source
+aec1230, isolated TheRock build, context65536 FP16, MTP loaded, CPU lane
+disabled, no reuse/slots. Four short prompts (80/76/98/76 actual tokens),
+one300-token greedy continuation per mode. Everyday262144 config unchanged.
+
+**Result.** Independent audit confirms all1200 ON/OFF token positions and
+response texts match, actual lengths300, zero cache reuse and stable per-run
+receipt/config/engine/table hashes. Observed rates:
+
+| Prompt | OFF tok/s | SPEC tok/s | Observed ratio | Accept | C2/T |
+|---|---:|---:|---:|---:|---:|
+| Chat |18.5|21.1|1.141|66.1%|1.39748|
+| Code |18.4|22.9|1.245|80.1%|1.40179|
+| Reasoning |18.4|23.4|1.272|85.7%|1.40401|
+| Prose |18.4|21.2|1.152|67.0%|1.39312|
+
+Earlier V2 probe logs show299/299 bitwise rows for both positions per prompt,
+maxabs0/argdiff0. Saved GEMV2 screen is bit-identical, reported GLM worst
+ratio1.042 (all listed formats worst1.200, still below1.25); union-MoE and
+32-row synthetic verify logs also pass. These logs predate the final rebuild.
+
+**Decision.** OPEN prototype, not a validated release or default switch.
+Do not say "all gates passed": mean C2/T1.39910 is below1.4, but code and
+reasoning exceed it. OFF/V2 engine hash e396dfed… differs from final SPEC
+fdc5086f…; 14–27% is observed throughput across builds, not a controlled
+same-binary speedup. Final-build correctness and same-binary validation would
+be separate GPU work, not launched by this follow-up.
+
+**Caveats.** Saved selftests do not substantiate the worker's final-tree
+five-test claim; this is missing evidence, not a demonstrated parity failure.
+Usage seed preserved but initial per-arm hashes/reseeding history incomplete.
+Historical harness preflight uses saved counts; current read-only API token
+counts match, but no historical fresh API preflight is preserved. One sample
+per mode; short prompts, not long-context or task-quality evidence. No
+gfx1201/gfx1100/CUDA execution or measured R9700 gains. Earlier failed/profile-
+dependent traces retained; causality of profile-related divergence unisolated.
+
+**Restoration.** Fresh live health262144/version1.0.24, exact everyday
+maya-nimo-256k.json path and sole GPU engine verified. Receipt configfb3b0737…,
+engine99b0279c… and table2cd69361… match the producer's restart-before receipt.
+Fused-v1026 worker failed on quota before running; exact queued retry remains
+waiting for21:38:22UTC, with ownership/health checks. No new PR/code push.
+
+**Evidence.** Local results/muse-tworow-decode.md and results/muse-tworow/
+independent-audit-20261009.json, raw responses/traces/receipts, fresh restored
+receipt and evidence hashes; complete remote harness/profile/failed-run
+snapshot and temporary gate logs preserved durably. Original producer report retained.
 
 ## Lessons
 
