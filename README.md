@@ -30,10 +30,10 @@ ROCm versions and run counts differ, so the notes say when a number is a small o
 
 | Setup | Prefill | Decode | Notes |
 |---|---|---|---|
-| RX 7900 XT (20 GB) | ~415 tok/s | ~15-16.4 tok/s | Local v1.0.15 baseline; [#19](https://github.com/mw00/project-maya/pull/19) reports ~16.4 with faster RDNA3/3.5 kernels. RAM shadows [#15](https://github.com/mw00/project-maya/pull/15) are on hold. |
-| AI PRO R9700 (32 GB) | ~749-830 tok/s | 21.2-21.5 tok/s (48 GB RAM); 25.0 with the tips below | v1.0.16. [#38](https://github.com/mw00/project-maya/pull/38) measured ~749-801 at ~4K and ~828-830 at ~8K in two-request checks; the typical-user report measured 749-781 at 8-20K. Decode is 256-token replies, three scored requests per arm, 48 GB RAM and `PROMOTE_MIN=6`, the same on v1.0.16 and the v1.0.23 integration build; treat it as a local result. The earlier 28.1 figure was a measurement artifact (see the correction below). |
-| Strix Halo (128 GB unified) | 258-273 tok/s (ROCm 7.2.2); 276/290/283 tok/s at 4/8/16K (ROCm 10.2 nightly) | 17.2-17.8 tok/s | v1.0.16 sweep, best `SUB=4096`. One ROCm 10.2 comparison was stable and added 5-11% to prefill; decode was unchanged. 64K setup is in progress. |
-| R9700 + RX 7900 XT | ~490 tok/s | ~34-36 tok/s | Local two-GPU v1.0.15 run; [#14](https://github.com/mw00/project-maya/pull/14), MTP drafts on the second card, ~76% accepted. |
+| RX 7900 XT (20 GB) | ~415 tok/s | ~15-16.4 tok/s | Local v1.0.15 baseline; [#19](https://github.com/mw00/project-maya/pull/19) reports ~16.4 with faster RDNA3/3.5 kernels. The v1.0.23 integration build measures ~570 tok/s prefill at 4K and ~18.3 tok/s decode (90 GB RAM). RAM shadows [#15](https://github.com/mw00/project-maya/pull/15) are on hold. |
+| AI PRO R9700 (32 GB) | ~782 tok/s at 8K, ~743 at 119K (128K context, INT8 latents) | ~25 tok/s (256-token replies, 90 GB RAM + tips below) | v1.0.23 integration build + [#38](https://github.com/mw00/project-maya/pull/38)/[#39](https://github.com/mw00/project-maya/pull/39), `PROMOTE_MIN=6`, three scored requests per arm. With 48 GB RAM the same build gives 21.2-21.5 tok/s decode. The earlier 28.1 figure was a measurement artifact (see the correction below). |
+| Strix Halo (128 GB unified) | ~351 tok/s at 8K, ~312 at 121K (128K context, preliminary) | ~17 tok/s (256-token replies) | v1.0.24 + prompt-tail skip + fused gfx11 MoE fix, TheRock ROCm 10.2. Preliminary: the 128K ladder is still running; 64K/128K measure identically so far. Older v1.0.16 64K numbers: 276/290/283 tok/s at 4/8/16K, decode 17.2-17.8. |
+| R9700 + RX 7900 XT | ~690/~756 tok/s at 4K/8K | ~38 tok/s | v1.0.23 integration build, [#14](https://github.com/mw00/project-maya/pull/14) layer split, MTP drafts on the second card, ~76% accepted. |
 
 The test box with the discrete cards has 192 GB of RAM, so experts that don't fit in VRAM come from pinned RAM rather
 than the SSD. With less RAM, decode is slower.
@@ -47,6 +47,11 @@ than the SSD. With less RAM, decode is slower.
 > - `STRATA_GLM_RESERVE_MB=1024`: 82 instead of 75 expert slots per layer, 22.6 tok/s (+5.3%).
 > - `STRATA_GLM_RAM_GB=90`: 24.5 tok/s (+14.2%).
 > - Both together: 25.0 tok/s (+16.5%). Prompt speed is unaffected (about 800 tok/s at 28K).
+>
+> **Recommended R9700 settings (2026-10-09).** For everyday use on one R9700 with plenty of host RAM: 128K context
+> (`--max-context 131072`) with `STRATA_GLM_KV_INT8=1`, `STRATA_GLM_RAM_GB=90`, `STRATA_GLM_RESERVE_MB=1024`,
+> `STRATA_GLM_PROMOTE_MIN=6`. That holds ~25 tok/s decode and ~782 tok/s prompt speed at 8K (~743 at 119K) —
+> within 1-2% of the 40K-context speed. The 1M model maximum runs but costs 12% decode and 31-37% prompt speed.
 
 ## How to run it
 
@@ -82,7 +87,10 @@ install. See [NOTES.md](NOTES.md#hip--rocm-lessons) for that evaluation path.
 | [#24](https://github.com/mw00/project-maya/pull/24) | PCIe link wake and RAM-demotion serving | merged, v1.0.15 |
 | [#25](https://github.com/mw00/project-maya/pull/25) | RAM-resident expert tier | merged, v1.0.15 |
 | [#26](https://github.com/mw00/project-maya/pull/26) | `PROMOTE_MIN`, to avoid one-off promotions | merged, v1.0.15 |
-| [#38](https://github.com/mw00/project-maya/pull/38) | RDNA4 `wmma2` prompt attention | open; R9700 verification complete |
+| [#38](https://github.com/mw00/project-maya/pull/38) | RDNA4 `wmma2` prompt attention | open; rebased, awaiting maintainer's CUDA check |
+| [#39](https://github.com/mw00/project-maya/pull/39) | Fix tier/lending races + invalid-route indexing (crash fix) | open; rebased, awaiting maintainer's CUDA check |
+| [#52](https://github.com/mw00/project-maya/pull/52) | HIP mappings for the device queries #44 uses (build fix) | merged |
+| [#61](https://github.com/mw00/project-maya/pull/61) | Skip the last layer's unused prompt outputs on one device (+1-1.4%, byte-identical) | open |
 
 The community PRs #24-#26 were merged in v1.0.15; the HIP fix needed by #24 is in upstream too. [#15](https://github.com/mw00/project-maya/pull/15)
 is open and on hold while the crash is fixed.

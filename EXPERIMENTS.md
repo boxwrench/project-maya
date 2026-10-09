@@ -5,7 +5,7 @@ built only from records that exist: the upstream PR descriptions and comments, t
 reports. Where a number is a single run, a small run, or noisy, the entry says so. Where no record exists, the entry says
 that instead of filling the gap.
 
-Last built 2026-10-09. A machine-readable copy is kept next to the benchmark data (`experiments.jsonl`, same IDs).
+Last built 2026-10-09; E40-E44 added in the hand-off refresh. A machine-readable copy is kept next to the benchmark data (`experiments.jsonl`, same IDs).
 
 ## How to read this
 
@@ -68,6 +68,11 @@ not controlled studies.
 | E37 | Comparisons with other projects | Other engines: halogen-flash-server and glm53-flash-offload | OPEN |
 | E38 | Prompt speed | R9700 prefill sub-batch 1024, 2048 and 4096 | DROPPED |
 | E39 | Decode speed | Single-R9700 decode regression on upstream builds | DROPPED |
+| E40 | Long context | R9700 long-context ladder, 40K to 1M | KEPT |
+| E41 | Long context | Strix long-context ladder (partial) | OPEN |
+| E42 | Quality | Tool-calling 400s were a stale frontend | FIXED |
+| E43 | Tooling | DeepSeek Harness (dsh) set up for agent work | OPEN |
+| E44 | Quality | NIAH recall garbles exact digits | OPEN |
 
 ## Prompt speed
 
@@ -710,6 +715,42 @@ Invalid-route injection (all and partial NaN/Inf on primary, predicted, lookahea
 
 **Evidence.** [#41](https://github.com/mw00/project-maya/pull/41) (our comment); local evidence: /ai/github/Maya-data/agent-tools/results/muse-nimo-pr41-44.md; local evidence: /ai/github/Maya-data/agent-tools/results/receipts/pr4144-before.json
 
+### E40 - R9700 long-context ladder, 40K to 1M (KEPT)
+
+**Question.** What is the largest context window on one R9700 that keeps speed, for everyday use, evals and agentic coding?
+
+**Setup.** Single R9700 (gfx1201, 32 GB), integration build (v1.0.23 + #39 + #38), ROCm 7.2.1, Maya-S IQ2_XXS, RAM_GB 90, RESERVE_MB 1024, PROMOTE_MIN 6, SUB 2048, identical usage-profile seed per arm. Model maximum context is 1048576. Arms: 40960, 65536, 131072 with FP16 latents, 131072 with INT8 latents, 1048576 with INT8.
+
+**Result.** One prompt/TTFT request per size; decode is 256-token replies after a ~1.6K prompt (last 3 of 5, all replies verified at 256 tokens), plus one decode after the longest prompt. No illegal/error in any engine log.
+
+| Arm | KV/state GiB | Slots/layer | Decode tok/s (mean of 3) | Prompt tok/s at ~8K / ~31K / ~63K / ~119K |
+|---|---|---:|---:|---|
+| 40960 FP16 | 0.71 | 82 | 25.33 | 795 / 788 / - / - |
+| 65536 FP16 | 1.00 | 81 | 25.20 (-0.5%) | 792 / 790 / 779 / - |
+| 131072 FP16 | 1.78 | 78 | 24.83 (-2.0%) | 789 / 790 / 778 / 749 |
+| 131072 INT8 | 1.13 | 80 | 25.10 (-0.9%) | 782 / 784 / 772 / 743 |
+| 1048576 INT8 | 7.45 | 58 | 22.23 (-12.2%) | 503 / 546 / 568 / 572 |
+
+**Decision.** KEPT: 131072 with INT8 latents is the everyday config (`maya-r9700-long-7900.json`). Each step up from 40960: 65536 costs ~nothing; 131072 FP16 costs 4 slots/layer and ~2% decode; 131072 INT8 costs 2 slots/layer and ~1% decode — the best 128K arm. The 1M maximum fits (58 slots/layer) but fails both bars: decode -12%, prompt -31 to -37%, prefill chunks collapse to 1536.
+
+**Caveats.** Single prompt request per size. RAM_GB 90 needs ~105-111 GB MemAvailable (the box has 186 GB).
+
+**Evidence.** local evidence: /ai/github/Maya-data/agent-tools/results/muse-r9700-longctx.md; local evidence: /ai/github/Maya-data/agent-tools/results/muse-r9700-longctx/ (logs, configs, receipts, harness)
+
+### E41 - Strix long-context ladder (partial) (OPEN)
+
+**Question.** Can nimo's everyday context rise to 128K+ while keeping speed, on current upstream plus our speedups?
+
+**Setup.** Strix Halo 8060S (gfx1151), 128 GB unified, TheRock ROCm 10.2; new build `maya-next` (v1.0.24 + prompt-tail skip + gfx11 fused MoE fix), `--prefill 32768` explicit. Baseline: everyday v1.0.16 64K server.
+
+**Result (partial, job still running at log time).** 64K and 128K arms measure identically so far: prompt ~351/337/325/312 tok/s at ~8K/~32K/~64K/~121K; decode 17.1 tok/s, 15.5 after the 121K prompt. A 262K arm, recall tests, and the everyday-server switch are still queued in the same job.
+
+**Decision.** OPEN: no config chosen yet; the job picks the largest context within ~10% prompt / unchanged decode of the 64K arm.
+
+**Caveats.** Preliminary single-sample numbers from a running job; final report not yet landed.
+
+**Evidence.** coordinator session notes, 2026-10-09 (job `muse-nimo-longctx` running); final report pending at /ai/github/Maya-data/agent-tools/results/muse-nimo-longctx.md
+
 ## Quality
 
 ### E35 - Quality of Maya on AMD (OPEN)
@@ -725,6 +766,34 @@ Invalid-route injection (all and partial NaN/Inf on primary, predicted, lookahea
 **Caveats.** The KL numbers are the maintainer's on V100, not ours. Greedy text differs between AMD runs because expert placement changes rounding; compare by coherence/acceptance unless tiers are pinned. A third party (sociolog, 3090 + 3060) reported a pinned bit-identical KL check; not run by us.
 
 **Evidence.** [#41](https://github.com/mw00/project-maya/pull/41) (maintainer comment, V100); PR descriptions #16, #19, #38
+
+### E42 - Tool-calling 400s were a stale frontend (FIXED)
+
+**Question.** Why does every OpenAI `tools` request fail with HTTP 400 "malformed tool call"?
+
+**Setup.** Single R9700, Maya-S; 12 tool cases in /ai/github/Maya-data/eval/tools_cases.json run against serve/ from the old `amd/glm-gfx1100` checkout (v1.0.15-era) vs serve/ from upstream main (v1.0.26).
+
+**Result.** Not a parser bug in upstream: the old serve/ only parsed Qwen's `<function=...>` form, so every GLM `NAME<arg_key>..` body was rejected. Stale serve/: 2/12; current serve/: 11/12 (the one miss is the model also calling web_search, not a parse error). Exact raw body captured and pinned in a unit test (`serve/test_tools.py`, 23 tests pass).
+
+**Decision.** FIXED: the server launcher (`start7900.sh`) now runs serve/ from each config's own engine tree instead of the stale checkout, so frontend and engine always match.
+
+**Caveats.** The 11/12 is one 12-case run. The old checkout's serve/ itself was left untouched (it is the user's branch).
+
+**Evidence.** local evidence: /ai/github/Maya-data/agent-tools/results/sonnet-toolcall-fix.md; local evidence: /ai/github/Maya-data/eval/results-smoke/tools.jsonl
+
+### E44 - NIAH recall garbles exact digits (OPEN)
+
+**Question.** Does long-context recall stay exact at 32-122K on the ~2-bit Maya-S quant?
+
+**Setup.** Single R9700, 131072 INT8 arm of E40; needle-in-a-haystack with real varied filler (402 repo sources), 3 needles at ~10/50/90% depth, temperature 0, plus one multi-hop sum question; one run each at ~33K/~65K/~122K.
+
+**Result.** 2/4 at 32.9K, 1/4 at 65.0K, 2/4 at 121.7K; the multi-hop sum is 3/3 with correct addends each time. Misses are noisy, not length-driven: digit transpositions (4817->4481, KQ-2291->KQ-2219) come and go across lengths, and one needle misreads 06:40 as 0600 at all three lengths with no confounder in the filler.
+
+**Decision.** OPEN: suspected ~2-bit quant precision; the quality eval should show whether it matters for real tasks.
+
+**Caveats.** Single run per length; one reply rescored HIT->MISS on a substring-scorer false positive ("44817" contains "4481" but the needle was 4817).
+
+**Evidence.** local evidence: /ai/github/Maya-data/agent-tools/results/muse-r9700-longctx.md
 
 ## Comparisons with other projects
 
@@ -755,6 +824,22 @@ Invalid-route injection (all and partial NaN/Inf on primary, predicted, lookahea
 **Caveats.** All numbers are theirs and were not rerun; halogen runs a different model and is Strix-Halo-only; glm53-flash-offload is NVIDIA-only. Figures taken from the coordinator's notes of their READMEs.
 
 **Evidence.** [https://github.com/peonist-ai/halogen-flash-server](https://github.com/peonist-ai/halogen-flash-server); [https://github.com/sybil-solutions/glm53-flash-offload](https://github.com/sybil-solutions/glm53-flash-offload); hub ROADMAP.md; coordinator session notes, 2026-10-08/09
+
+## Tooling
+
+### E43 - DeepSeek Harness (dsh) set up for agent work (OPEN)
+
+**Question.** Can a second agent harness (DeepSeek's) serve as overflow worker and as the driver for "GLM alone" showcase builds?
+
+**Setup.** `dsh` 0.2.0-rc.2 (developer preview) installed globally; one-shot wrapper `dsh/dsh-run.sh <maya|deepseek> <workdir> <brief.md> <log>` (headless, full access, JSON events). `deepseek` route = the DeepSeek API (deepseek-flash); `maya` route = local GLM-5.3-Flash via the Maya server on :8099 (provider added to the dsh settings).
+
+**Result.** The `deepseek` route passed a smoke test. The `maya` route is configured but untested. Planned first use: GLM-5.3-Flash alone rebuilding public demo projects through the local server.
+
+**Decision.** OPEN: set up and ready; smoke-test the `maya` route before the showcase builds.
+
+**Caveats.** Preview software; the harness's local-model path has no result on file yet.
+
+**Evidence.** coordinator session notes, 2026-10-09
 
 ## Lessons
 

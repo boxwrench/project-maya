@@ -6,29 +6,32 @@ RX 7900 XT come second.
 ## Now
 
 - **Crash fix ([#39](https://github.com/mw00/project-maya/pull/39)) and RDNA4 prompt attention
-  ([#38](https://github.com/mw00/project-maya/pull/38)), rebased onto v1.0.21.** The rebase sits on top of
-  [#41](https://github.com/mw00/project-maya/pull/41) (INT8 latent cache), [#44](https://github.com/mw00/project-maya/pull/44)
-  (auto split and chunks), and [#31](https://github.com/mw00/project-maya/pull/31) (speculation groups). Verify it, push
-  both, and leave CUDA testing and the merge to the maintainer. Also collect fresh two-GPU, single-R9700, and RX 7900 XT
-  numbers from that build.
-- **Fused WMMA prompt MoE on gfx11: parity fix.** The kernel fails parity, likely because the SwiGLU clamp is missing
-  and/or the WMMA operand order is wrong. Fix it, then re-measure on Strix Halo. It gave +5-8% prompt speed before the fix.
-- **[#52](https://github.com/mw00/project-maya/pull/52): v1.0.21 does not build on AMD** without three HIP mappings. Open.
+  ([#38](https://github.com/mw00/project-maya/pull/38)), rebased and pushed.** Both sit on current main with
+  [#41](https://github.com/mw00/project-maya/pull/41) (INT8 latent cache) handled, and await the maintainer's CUDA
+  check. Reporters of [#50](https://github.com/mw00/project-maya/issues/50) (NVIDIA) and
+  [#53](https://github.com/mw00/project-maya/issues/53) (Windows RX 7900 XTX) have been pointed at #39; a CUDA
+  confirmation from #50 would help the merge.
+- **Skip the dead final-layer prompt work ([#61](https://github.com/mw00/project-maya/pull/61)).** Open. On one GPU
+  with no MTP block loaded, the last layer's FFN and attention output projection for every prompt token except the
+  last feed nothing. Measured +1-1.4% prompt speed, byte-identical output.
+- **128K everyday configs.** Done on the R9700 (single card, INT8 latents, decode ~25 tok/s, prompt ~782 tok/s at
+  8K / ~743 at 119K); in progress on Strix Halo (128K arm measuring now, then the everyday server switches over).
+- **Quality eval, then showcase builds.** Next: confirm tool calling (11/12) and run the full brief quality eval on
+  the R9700 (~2.5-3 h, unattended) — the first real AMD quality numbers. Then GLM-5.3-Flash alone, driven through
+  the local Maya server, rebuilds public demo projects (first `landscape-forge`, then
+  `Water-Treatment-Plant-Simulator`).
+- **Fused WMMA prompt MoE for gfx1151: needs a PR.** The SwiGLU-clamp fix passes parity and gives +13/+7.5/+4.8%
+  Strix prefill at 4/8/16K, but is committed on top of v1.0.16 and must be rebased onto current main (gfx1151
+  only; enabling gfx1100 needs a separate validation).
 
 ## Next
 
-- **R9700 decode expert kernels for RDNA4.** The IQ2_S down kernel went from 64.1 to 50.1 us (+28%); IQ3_XXS down
-  shows no gain. Finish the IQ2_S work, prove bit-identical parity, and run a full-model decode A/B.
-- **Skip the dead final-layer prompt work (MG-L005).** On one GPU with no MTP block loaded, the last layer's FFN and
-  attention output for every prompt token except the last feed nothing. Skipping it is expected to give +1-2% prompt
-  speed, with identical output.
-- **Single-GPU MTP speculation for Strix Halo (reopened).** Measure first: single-card draft acceptance and draft cost.
-  Two-GPU acceptance was about 0.76. A two-token verify is estimated at about 1.2x a one-token step, because dense
-  weights are read once. Then decide whether to build it. Potential gain: up to about 1.4x decode.
-- **R9700 prompt sub-batch sweep** at 1024, 2048, and 4096.
-- **Point upstream reporters at the fix.** After [#39](https://github.com/mw00/project-maya/pull/39) is pushed, tell the
-  reporters of [#50](https://github.com/mw00/project-maya/issues/50) (NVIDIA) and
-  [#53](https://github.com/mw00/project-maya/issues/53) (Windows RX 7900 XTX). Both show the same crash signature.
+- **Two-token decode step for single-GPU speculation.** Running two rows through the prompt path costs 8.2x a
+  decode step, so speculation needs purpose-built two-row decode kernels (dense GEMV sharing weight reads, two-row
+  experts and attention) at <= ~1.4x a step. Staged work with gates; stop at the first failed gate.
+- **NIAH digit precision.** Long-context recall sometimes garbles exact digits (4817->4481) while multi-hop sums
+  score 3/3 — suspected ~2-bit quant precision. The quality eval should show whether it matters.
+- **Close [#15](https://github.com/mw00/project-maya/pull/15)** (RAM shadows, on hold) once #39 lands.
 
 ## Later, bigger bets (only if the numbers justify them)
 
@@ -41,8 +44,10 @@ RX 7900 XT come second.
 
 | Idea | Why not |
 |---|---|
-| Single-GPU MTP speculation | **Reopened and being measured:** first measure expert overlap and single-card draft cost. Consecutive tokens share only ~30% of their experts (#26's data), so verifying two tokens may cost almost twice the expert reads. The earlier 1.1-1.2x estimate needs a fresh Strix measurement. |
-| Fused int8 WMMA prompt MoE (from [Strata](https://github.com/Niko1221/Strata)) | Ported and correct, but no end-to-end gain on the R9700 or RX 7900 XT so far. |
+| Single-GPU MTP via the prompt path | Parked: a 2-row verify through the existing batched path costs 8.2x a decode step (dense FP16 GEMMs dominate) and fails parity. Reopened as the two-row decode-kernel work above. Draft acceptance itself is good (75% greedy on Strix). |
+| RDNA4 decode expert kernels | Tuned and bit-identical (+18-29% in microbenchmarks) but only +1% end-to-end decode: experts are a small slice of a step. Parked. |
+| R9700 prefill sub-batch 1024 vs 2048 vs 4096 | No gain within noise (single samples); 4096 reads lower at 8K/28K. Keep 1024-2048. |
+| Fused int8 WMMA prompt MoE (from [Strata](https://github.com/Niko1221/Strata)) | Ported and correct, but no end-to-end gain on the R9700 or RX 7900 XT so far. (On Strix Halo the fused path does win; see Now.) |
 | llama.cpp's RDNA4 MMQ patch ([#25940](https://github.com/ggml-org/llama.cpp/pull/25940)) | No repeatable gain for Maya's IQ formats. |
 | Shared expert on a second stream (Strix) | Correct, identical output, but within noise (17.2 vs 17.9 tok/s). |
 | HIP graphs for decode | Tiny kernels are only ~5% of a Strix token; the time is in reading weights. |
