@@ -12,7 +12,8 @@ it is, how to run it, and what's next.
 > long prompts and RAM-heavy modes (`STRATA_GLM_RAM_RESIDENT` and RAM shadows [#15](https://github.com/mw00/project-maya/pull/15)),
 > and occasionally with the default tiers. Review found an async table-update race, a resident-mode background-promotion
 > race, and a router path that indexes `INT_MAX` after NaN scores. A fix is being verified. Until then, on one R9700 or
-> RX 7900 XT keep prompts short and use the default tiers. Strix Halo has run 8-30K-token prompts cleanly.
+> RX 7900 XT keep prompts short and use the default tiers unless running the tested integration fixes.
+> The Strix integration build has completed recall requests through ~240K tokens.
 
 ## What works
 
@@ -32,7 +33,7 @@ ROCm versions and run counts differ, so the notes say when a number is a small o
 |---|---|---|---|
 | RX 7900 XT (20 GB) | ~415 tok/s | ~15-16.4 tok/s | Local v1.0.15 baseline; [#19](https://github.com/mw00/project-maya/pull/19) reports ~16.4 with faster RDNA3/3.5 kernels. The v1.0.23 integration build measures ~570 tok/s prefill at 4K and ~18.3 tok/s decode (90 GB RAM). RAM shadows [#15](https://github.com/mw00/project-maya/pull/15) are on hold. |
 | AI PRO R9700 (32 GB) | ~782 tok/s at 8K, ~743 at 119K (128K context, INT8 latents) | ~25 tok/s (256-token replies, 90 GB RAM + tips below) | v1.0.23 integration build + [#38](https://github.com/mw00/project-maya/pull/38)/[#39](https://github.com/mw00/project-maya/pull/39), `PROMOTE_MIN=6`, three scored requests per arm. With 48 GB RAM the same build gives 21.2-21.5 tok/s decode. The earlier 28.1 figure was a measurement artifact (see the correction below). |
-| Strix Halo (128 GB unified) | ~351 tok/s at 8K, ~312 at 121K (128K context, preliminary) | ~17 tok/s (256-token replies) | v1.0.24 + prompt-tail skip + fused gfx11 MoE fix, TheRock ROCm 10.2. Preliminary: the 128K ladder is still running; 64K/128K measure identically so far. Older v1.0.16 64K numbers: 276/290/283 tok/s at 4/8/16K, decode 17.2-17.8. |
+| Strix Halo (128 GB unified) | ~343/337/327/314 tok/s at 8K/32K/64K/120K (262144 context, FP16 latents) | ~17 short-prompt / ~15.5 after 120K (256-token replies) | v1.0.24 + prompt-tail skip + fused gfx11 MoE fix, TheRock ROCm 10.2. One request per cell; reserving 262K instead of 64K changes matched-length prompt speed by at most 1.6%. All experts fit at startup, but prompt lending evicts some; decode still fetches from disk. See [E41](EXPERIMENTS.md#e41---strix-long-context-ladder-kept). |
 | R9700 + RX 7900 XT | ~690/~756 tok/s at 4K/8K | ~38 tok/s | v1.0.23 integration build, [#14](https://github.com/mw00/project-maya/pull/14) layer split, MTP drafts on the second card, ~76% accepted. |
 
 The test box with the discrete cards has 192 GB of RAM, so experts that don't fit in VRAM come from pinned RAM rather
@@ -52,6 +53,21 @@ than the SSD. With less RAM, decode is slower.
 > (`--max-context 131072`) with `STRATA_GLM_KV_INT8=1`, `STRATA_GLM_RAM_GB=90`, `STRATA_GLM_RESERVE_MB=1024`,
 > `STRATA_GLM_PROMOTE_MIN=6`. That holds ~25 tok/s decode and ~782 tok/s prompt speed at 8K (~743 at 119K) —
 > within 1-2% of the 40K-context speed. The 1M model maximum runs but costs 12% decode and 31-37% prompt speed.
+
+> **Strix context choice (2026-10-09).** The tested integration config uses `--max-context 262144 --prefill 32768`,
+> FP16 latents, `STRATA_GLM_PREFILL_SUB=4096`, `STRATA_GLM_PREFILL_MB=12288`, and the gfx1151 hipBLASLt table for
+> library version 100500. The pool retains 12,096 expert slots (80.17 GB) with 3.32 GB of state/KV reserved.
+> Muse reports 12/12 single-needle and 4/4 multi-hop hits through ~240K; raw logs confirm those request lengths,
+> but the reply texts were not retained for independent rescoring. This is a small recall sample, not a general
+> quality result. Longer actual prompts still reduce decode speed; the small reservation cost is a separate finding.
+
+## Quality sanity check
+
+One R9700, 128K INT8 config: GSM8K 37/40, MMLU-Pro 48/56, HumanEval 30/30,
+IFEval 29/40 strict (35/40 loose), tools 11/12. All 183 short-task cases completed
+without request errors or truncation. Writing was coherent but missed some explicit
+constraints. These are small samples, not full benchmark or AMD/NVIDIA equivalence
+claims. See [QUALITY.md](QUALITY.md) for method, grading correction and limitations.
 
 ## How to run it
 

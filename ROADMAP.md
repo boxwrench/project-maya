@@ -14,15 +14,22 @@ RX 7900 XT come second.
 - **Skip the dead final-layer prompt work ([#61](https://github.com/mw00/project-maya/pull/61)).** Open. On one GPU
   with no MTP block loaded, the last layer's FFN and attention output projection for every prompt token except the
   last feed nothing. Measured +1-1.4% prompt speed, byte-identical output.
-- **128K everyday configs.** Done on the R9700 (single card, INT8 latents, decode ~25 tok/s, prompt ~782 tok/s at
-  8K / ~743 at 119K); in progress on Strix Halo (128K arm measuring now, then the everyday server switches over).
-- **Quality eval, then showcase builds.** Next: confirm tool calling (11/12) and run the full brief quality eval on
-  the R9700 (~2.5-3 h, unattended) — the first real AMD quality numbers. Then GLM-5.3-Flash alone, driven through
+- **Everyday context configs.** R9700: 128K INT8 latents, decode ~25 tok/s, prompt ~782 tok/s at
+  8K / ~743 at 119K. Strix Halo: 262144 FP16, ~343/337/327/314 prompt tok/s at 8K/32K/64K/120K;
+  reserving the larger window costs at most 1.6% at matched lengths. Expert capacity is preserved, but prompt
+  lending still evicts residents and decode fetches from disk. The two-row worker restores this config at completion.
+- **Quality baseline and local showcase route validated.** Fresh R9700 128K run: math 37/40, MMLU-Pro 48/56,
+  HumanEval 30/30 (grader-context correction audited), IFEval 29/40 strict / 35/40 loose, tools 11/12.
+  All 183 cases completed without request errors or truncation; five writing outputs have constraint misses.
+  See [QUALITY.md](QUALITY.md). No matched NVIDIA comparison or long-context quality attribution.
+  Local-Maya dsh smoke passed eight independently rerun tests; large builds remain untested.
+  Next GLM-5.3-Flash alone, driven through
   the local Maya server, rebuilds public demo projects (first `landscape-forge`, then
   `Water-Treatment-Plant-Simulator`).
-- **Fused WMMA prompt MoE for gfx1151: needs a PR.** The SwiGLU-clamp fix passes parity and gives +13/+7.5/+4.8%
-  Strix prefill at 4/8/16K, but is committed on top of v1.0.16 and must be rebased onto current main (gfx1151
-  only; enabling gfx1100 needs a separate validation).
+- **Fused WMMA prompt MoE for gfx1151: PR preparation.** The tested v1.0.16 prototype gives +13/+7.5/+4.8%
+  Strix prefill at 4/8/16K. It applies cleanly to v1.0.26; preparation restricts runtime dispatch to gfx1151 and
+  preserves MMQ scratch on other devices or with the switch disabled. Current-main engine/parity targets compile
+  for gfx1151/gfx1100/gfx1201; Python checks pass. Fresh Strix runtime validation is pending.
 
 ## Next
 
@@ -30,7 +37,9 @@ RX 7900 XT come second.
   decode step, so speculation needs purpose-built two-row decode kernels (dense GEMV sharing weight reads, two-row
   experts and attention) at <= ~1.4x a step. Staged work with gates; stop at the first failed gate.
 - **NIAH digit precision.** Long-context recall sometimes garbles exact digits (4817->4481) while multi-hop sums
-  score 3/3 — suspected ~2-bit quant precision. The quality eval should show whether it matters.
+  score 3/3 on the R9700. Quant precision is one hypothesis; the Strix FP16 sample used different needles and
+  reported no misses, so the cause is not established. The short-task eval is a sanity baseline, not a controlled
+  test of these long-context failures.
 - **Close [#15](https://github.com/mw00/project-maya/pull/15)** (RAM shadows, on hold) once #39 lands.
 
 ## Later, bigger bets (only if the numbers justify them)

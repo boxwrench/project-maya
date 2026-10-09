@@ -737,19 +737,19 @@ Invalid-route injection (all and partial NaN/Inf on primary, predicted, lookahea
 
 **Evidence.** local evidence: /ai/github/Maya-data/agent-tools/results/muse-r9700-longctx.md; local evidence: /ai/github/Maya-data/agent-tools/results/muse-r9700-longctx/ (logs, configs, receipts, harness)
 
-### E41 - Strix long-context ladder (partial) (OPEN)
+### E41 - Strix long-context ladder (KEPT)
 
 **Question.** Can nimo's everyday context rise to 128K+ while keeping speed, on current upstream plus our speedups?
 
 **Setup.** Strix Halo 8060S (gfx1151), 128 GB unified, TheRock ROCm 10.2; new build `maya-next` (v1.0.24 + prompt-tail skip + gfx11 fused MoE fix), `--prefill 32768` explicit. Baseline: everyday v1.0.16 64K server.
 
-**Result (partial, job still running at log time).** 64K and 128K arms measure identically so far: prompt ~351/337/325/312 tok/s at ~8K/~32K/~64K/~121K; decode 17.1 tok/s, 15.5 after the 121K prompt. A 262K arm, recall tests, and the everyday-server switch are still queued in the same job.
+**Result.** Final 262144 FP16 arm: 342.6/337.4/326.5/314.0 prompt tok/s at ~8K/~32K/~64K/~120K. New 64K arm: 347.9/340.2/324.2 at the first three lengths, so the larger reservation changes speed by -1.5%/-0.8%/+0.7%. At the two measured old-v1.0.16 baseline lengths, gains are +6.1% at 8K and +4.2% at 32K. Short-prompt decode 17.0 vs 17.1 tok/s, falling to 15.5 after ~120K; the five 262K-arm throughput replies reached 256 tokens. Muse reports 12/12 single-needle + 4/4 multi-hop hits through ~240K; preserved logs confirm requests through 239644 prompt tokens.
 
-**Decision.** OPEN: no config chosen yet; the job picks the largest context within ~10% prompt / unchanged decode of the 64K arm.
+**Decision.** KEPT: `maya-nimo-256k.json`, 262144 context, FP16 latents, explicit prefill 32768, sub-batch 4096. All 12096 expert slots still fit (80.17 GB pool), with state/KV 3.32 GB; INT8 saves memory but has no capacity benefit on this box and costs about 2% prompt speed.
 
-**Caveats.** Preliminary single-sample numbers from a running job; final report not yet landed.
+**Caveats.** One request per cell and one recall pass, no confidence interval. Reply texts were not preserved for independent recall rescoring. Capacity is not continuous residency: the raw 262K log reports 11260/12096 experts resident after the ~120K prompt and 1.26 disk reads/token during that decode, because prompt lending evicts experts. Reserving a larger window is distinct from filling it. The everyday config is temporarily replaced during the two-row job, which must restore it.
 
-**Evidence.** coordinator session notes, 2026-10-09 (job `muse-nimo-longctx` running); final report pending at /ai/github/Maya-data/agent-tools/results/muse-nimo-longctx.md
+**Evidence.** /ai/github/Maya-data/agent-tools/results/muse-nimo-longctx.md (final, audited); /ai/github/Maya-data/agent-tools/results/muse-nimo-next262k-before.json and -after.json; preserved config/engine/server logs in /ai/github/Maya-data/agent-tools/results/muse-nimo-longctx-evidence/
 
 ## Quality
 
@@ -757,15 +757,15 @@ Invalid-route injection (all and partial NaN/Inf on primary, predicted, lookahea
 
 **Question.** Does the AMD path change output quality compared with NVIDIA?
 
-**Setup.** n/a; n/a. AMD checks: parity tests (layer, FFN, DSA, model, MMQ, attention), 7-check smoke test.
+**Setup.** Single R9700, ROCm 7.2.1, Maya v1.0.23 integration + #38/#39, Maya-S, 131072 context, INT8 latents, RAM 90 GB, reserve 1024 MB. Seed 1234 sampled short tasks, exact prompt preflights and before/after receipts. Earlier AMD kernel parity tests remain separate evidence.
 
-**Result.** Parity: rocWMMA vs F32 rel L2 9.8e-5; wmma2 vs F32 1.6e-7 to 3.4e-7; #19 kernels bit-identical. No perplexity/KL/benchmark on AMD.
+**Result.** 183 cases completed: GSM8K 37/40, MMLU-Pro 48/56, HumanEval 30/30, IFEval prompt strict 29/40 / loose 35/40 (instruction strict 82.5%), tools 11/12, five writing outputs reviewed. Zero request errors, truncations or checker errors. HumanEval corrected from 29/30 after restoring a supplied prompt helper; all saved answers rescored, originals preserved. Writing coherent but some exact constraints missed. Earlier parity: rocWMMA vs F32 rel L2 9.8e-5; wmma2 vs F32 1.6e-7 to 3.4e-7; #19 kernels bit-identical.
 
-**Decision.** We ran no quality evals. We only ran kernel parity tests and coherence checks. Published numbers are the maintainer's NVIDIA ones.
+**Decision.** AMD short-task baseline measured. OPEN for the original AMD-versus-NVIDIA question: no matched NVIDIA control, AMD perplexity/KL, or controlled long-context precision ablation. This sample does not explain E44's digit garbling.
 
-**Caveats.** The KL numbers are the maintainer's on V100, not ours. Greedy text differs between AMD runs because expert placement changes rounding; compare by coherence/acceptance unless tiers are pinned. A third party (sociolog, 3090 + 3060) reported a pinned bit-identical KL check; not run by us.
+**Caveats.** Small sampled suites, not full benchmark scores. MMLU samples four per category. Writing has no aggregate score; variable reply lengths are not throughput data. The KL numbers are the maintainer's on V100, not ours. Greedy text differs between AMD runs because expert placement changes rounding; compare by coherence/acceptance unless tiers are pinned. A third party (sociolog, 3090 + 3060) reported a pinned bit-identical KL check; not run by us.
 
-**Evidence.** [#41](https://github.com/mw00/project-maya/pull/41) (maintainer comment, V100); PR descriptions #16, #19, #38
+**Evidence.** [QUALITY.md](QUALITY.md); local eval/results-r9700-128k-20261009/ (raw answers, grading audit and receipts); results/codex-quality-r9700-128k.md. [#41](https://github.com/mw00/project-maya/pull/41) (maintainer comment, V100); PR descriptions #16, #19, #38
 
 ### E42 - Tool-calling 400s were a stale frontend (FIXED)
 
@@ -789,7 +789,7 @@ Invalid-route injection (all and partial NaN/Inf on primary, predicted, lookahea
 
 **Result.** 2/4 at 32.9K, 1/4 at 65.0K, 2/4 at 121.7K; the multi-hop sum is 3/3 with correct addends each time. Misses are noisy, not length-driven: digit transpositions (4817->4481, KQ-2291->KQ-2219) come and go across lengths, and one needle misreads 06:40 as 0600 at all three lengths with no confounder in the filler.
 
-**Decision.** OPEN: suspected ~2-bit quant precision; the quality eval should show whether it matters for real tasks.
+**Decision.** OPEN: quant precision is a hypothesis, not an attribution. The completed E35 short-task baseline does not test long-context digit recall or isolate quant versus KV precision.
 
 **Caveats.** Single run per length; one reply rescored HIT->MISS on a substring-scorer false positive ("44817" contains "4481" but the needle was 4817).
 
@@ -827,19 +827,19 @@ Invalid-route injection (all and partial NaN/Inf on primary, predicted, lookahea
 
 ## Tooling
 
-### E43 - DeepSeek Harness (dsh) set up for agent work (OPEN)
+### E43 - DeepSeek Harness (dsh) set up for agent work (KEPT)
 
 **Question.** Can a second agent harness (DeepSeek's) serve as overflow worker and as the driver for "GLM alone" showcase builds?
 
 **Setup.** `dsh` 0.2.0-rc.2 (developer preview) installed globally; one-shot wrapper `dsh/dsh-run.sh <maya|deepseek> <workdir> <brief.md> <log>` (headless, full access, JSON events). `deepseek` route = the DeepSeek API (deepseek-flash); `maya` route = local GLM-5.3-Flash via the Maya server on :8099 (provider added to the dsh settings).
 
-**Result.** The `deepseek` route passed a smoke test. The `maya` route is configured but untested. Planned first use: GLM-5.3-Flash alone rebuilding public demo projects through the local server.
+**Result.** Both routes passed a smoke. The fresh local `maya` route created a Python mean function, eight unittest cases and a report; ran its tests through the harness; and completed four local-model steps. Independent file inspection and test rerun: 8/8 pass. No other model/agent or external service used by the worker. Receipts retained; server unchanged.
 
-**Decision.** OPEN: set up and ready; smoke-test the `maya` route before the showcase builds.
+**Decision.** KEPT: local-Maya edit/tool/test cycle validated; ready for scoped GLM-only showcase work. The showcase rebuilds themselves are not yet demonstrated.
 
-**Caveats.** Preview software; the harness's local-model path has no result on file yet.
+**Caveats.** Preview software. Small arithmetic task, no failed-test repair needed; not evidence of large-project performance or autonomous recovery.
 
-**Evidence.** coordinator session notes, 2026-10-09
+**Evidence.** coordinator session notes, 2026-10-09; local results/dsh-maya-smoke-20261009.md, logs/dsh-maya-smoke-20261009.log.jsonl, before/after receipts.
 
 ## Lessons
 
@@ -852,4 +852,4 @@ Invalid-route injection (all and partial NaN/Inf on primary, predicted, lookahea
 - **Defaults follow the machine.** `--prefill auto` was 22-24% slower than hand-tuned chunks on Strix (E09); on AMD the sub-batch matters as much as the chunk (E01).
 - **Measure on every architecture you claim.** gfx1151 was compiled but not run for the #39 fix; #38's wmma2 loses to f16q on Strix; #19 left gfx1201 alone (E03, E12, E30).
 - **Keep dropped ideas written down.** E05, E06, E15-E17 and E24 record why not, so they are not re-run.
-- **Say what you did not measure.** No AMD quality evals exist (E35); the R9700 long-prompt and two-GPU #44 runs are still queued (E24, E34).
+- **Say what you did not measure.** A sampled AMD short-task baseline exists (E35), but no matched NVIDIA control or AMD KL/perplexity. E40/E41 cover current long-context configs; the two-GPU #44 run remains pending (E24).
