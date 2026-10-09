@@ -67,7 +67,7 @@ not controlled studies.
 | E36 | Comparisons with other projects | OpenMOSE Strata-GLM-AMD (their numbers) | OPEN |
 | E37 | Comparisons with other projects | Other engines: halogen-flash-server and glm53-flash-offload | OPEN |
 | E38 | Prompt speed | R9700 prefill sub-batch 1024, 2048 and 4096 | DROPPED |
-| E39 | Decode speed | Single-R9700 decode regression on upstream builds | OPEN |
+| E39 | Decode speed | Single-R9700 decode regression on upstream builds | DROPPED |
 
 ## Prompt speed
 
@@ -346,7 +346,7 @@ Full-model single-R9700 decode, four measured requests per arm after two warm-up
 
 **Decision.** DROPPED (parked). The per-kernel win does not reach end-to-end decode on the R9700. No push was made.
 
-**Caveats.** The full-model comparison is one pair of four-request arms on one card. The brief's 28.1 tok/s v1.0.16 reference is a separate measurement and is not compared here. gfx1100 dispatch was left unchanged.
+**Caveats.** The full-model comparison is one pair of four-request arms on one card. The 28.1 tok/s v1.0.16 reference in earlier notes is a measurement artifact (short replies; see E39) and is not used here. gfx1100 dispatch was left unchanged.
 
 **Evidence.** local evidence: /ai/github/Maya-data/agent-tools/results/luna-rdna4-experts.md; local evidence: /ai/github/Maya-data/agent-tools/briefs/luna-rdna4-experts.md
 ### E14 - CPU expert lane plans (two GPUs) (DROPPED)
@@ -425,29 +425,35 @@ The lane's 13.7 ms/token overlaps GPU work and removes PCIe fetches. Baseline co
 **Caveats.** Four prompts, one 300-token continuation each: a feasibility sample, not a workload estimate. The 1.2x verify cost is an assumption, based on a read-sharing hypothesis (about 10.2 GB versus 8.5 GB per step), not a measurement. Long-context acceptance is not measured. The earlier 1.1-1.2x estimate remains unverified.
 
 **Evidence.** local evidence: /ai/github/Maya-data/agent-tools/results/codex-mtp-accept.md; hub ROADMAP.md; local evidence: /ai/github/Maya-data/agent-tools/results/openmose-next.md (section 3)
-### E39 - Single-R9700 decode regression on upstream builds (OPEN)
+### E39 - Single-R9700 decode regression on upstream builds (DROPPED)
 
-**Question.** Why does single-R9700 decode fall from 28.1 tok/s on v1.0.16 to about 20.5 to 22 tok/s on later upstream builds?
+**Question.** Does single-R9700 decode fall from 28.1 tok/s on v1.0.16 to about 20.5 to 22 tok/s on later upstream builds? (Answer: no; the 28.1 was a short-reply artifact.)
 
-**Setup.** R9700 (gfx1201, 32 GB), single GPU, RAM tier 48 GB, PROMOTE_MIN 6. Reference: v1.0.16 (746ee3f), 28.1 tok/s (E22). Later builds: v1.0.23 integration (+ #39 + #38); #38 alone on b7b8d75; the legacy-kernel arm on the v1.0.23 base; and the sub-batch probe (E38).
+**Setup.** R9700 (gfx1201, 32 GB), single GPU, RAM tier 48 GB, PROMOTE_MIN 6. Reference: v1.0.16 (746ee3f), 28.1 tok/s (E22, superseded: a short-reply artifact). Later builds: v1.0.23 integration (+ #39 + #38); #38 alone on b7b8d75; the legacy-kernel arm on the v1.0.23 base; and the sub-batch probe (E38).
 
-**Result.** Single-R9700 decode, tok/s:
+**Result.** Single-R9700 decode, tok/s, 256-token replies, five distinct greedy requests per arm (two warm-ups discarded, three scored), 1,600-token prompts, PROMOTE_MIN 6:
 
-| build | decode tok/s |
-|---|---|
-| v1.0.16 (E22, two scored passes) | 28.1 |
-| v1.0.23 + #39 + #38, RAM 48 | about 22 |
-| #38 alone (b7b8d75), same protocol | about 21.8 |
-| v1.0.23 base, legacy expert kernels (four requests) | 21.75 |
-| sub-batch probe (E38, 1600-token prompt, 256 output, n=2) | 15.5 to 16.4, then 20.4 to 20.6 |
+| build / setting | context | decode tok/s (mean) |
+|---|---|---:|
+| v1.0.16, RAM 48 | 8K | 21.23 |
+| v1.0.21 + #38, RAM 48 | 8K | 21.47 |
+| v1.0.23 integration (+ #39 + #38), RAM 48 | 8K | 21.47 |
+| v1.0.16, RAM 48 | 40K | 21.20 |
+| v1.0.23 integration, RAM 48 | 40K | 21.43 |
+| v1.0.23 integration, RAM 48, `STRATA_GLM_RESERVE_MB=1024` | 40K | 22.57 |
+| v1.0.23 integration, `STRATA_GLM_RAM_GB=90` | 40K | 24.47 |
+| v1.0.23 integration, RAM 90, reserve 1024 | 40K | 24.97 |
+| v1.0.23 integration, RAM 48, 32-token replies (control) | 8K | 24.60 |
 
-On the R9700 with a 90 GB RAM tier the integration build gave 24.6 tok/s decode; dropping PROMOTE_MIN cost 4% decode (promotions rose from 6 to 33 per token).
+Long prompts are unaffected: both reserve-1024 configurations pass a 28,280-token prefill check at 799.0 and 800.7 tok/s.
 
-**Decision.** OPEN; cause under investigation. The suspect is VRAM reservations from #41 and #44 that reduce expert slots on this card. That has not been tested.
+The earlier 28.1 (v1.0.16) and about 22 (integration) figures in this entry are superseded. The 28.1 run's replies averaged about 26 tokens, and the 32-token control shows short replies decode faster. Other arms recorded here (#38 alone 21.8, legacy kernels 21.75, the E38 probe) are in the same 21-22 range and are kept as recorded.
 
-**Caveats.** Few requests per arm. The v1.0.21 and v1.0.24 builds are not among the records read for this entry. The 28.1 figure comes from a different build and protocol, and the integration report says the old baselines do not reproduce even for #38 alone, so part of the gap may be a stale baseline.
+**Decision.** DROPPED (2026-10-09). No regression between v1.0.16 and v1.0.23 on controlled runs; the gap was a measurement artifact. No engine patch is justified. Settings tip for one R9700: `STRATA_GLM_RESERVE_MB=1024` (82 instead of 75 expert slots per layer, +5.3%) and `STRATA_GLM_RAM_GB=90` (+14.2%); together +16.5% (25.0 tok/s). The reserve does cost about 5% decode (the suspect in the earlier notes), a tuning effect rather than a regression.
 
-**Evidence.** local evidence: /ai/github/Maya-data/agent-tools/results/muse-local-integration.md; local evidence: /ai/github/Maya-data/agent-tools/results/luna-rdna4-experts.md; local evidence: /ai/github/Maya-data/agent-tools/results/muse-r9700-subsweep.md; E22 (local evidence: /ai/github/Maya-data/benchmarks/r9700-typical/REPORT.md)
+**Caveats.** Three scored requests per arm; the RAM 90 and combined arms are single configurations. The 90 GB reference in E22 (25.5) was not re-run; the controlled RAM 90 arm gives 24.5.
+
+**Evidence.** local evidence: /ai/github/Maya-data/agent-tools/results/sol-r9700-decode-regress.md; local evidence: /ai/github/Maya-data/agent-tools/results/muse-local-integration.md; local evidence: /ai/github/Maya-data/agent-tools/results/luna-rdna4-experts.md; local evidence: /ai/github/Maya-data/agent-tools/results/muse-r9700-subsweep.md; E22 (local evidence: /ai/github/Maya-data/benchmarks/r9700-typical/REPORT.md)
 
 ## Expert tiers
 
@@ -509,6 +515,8 @@ Stability (shadow, v1.0.11): 12/12 benchmark requests, 7/7 smoke checks, 20/20 s
 **Setup.** R9700 (HIP GPU 1), 32 GB; Maya v1.0.16 (746ee3f), context 8192, 48 GB RAM. Single R9700, 48 GB RAM tier, 256-token answers.
 
 **Result.** Decode 28.1 / 27.7 tok/s (combined 28.1), VRAM hit 81%, RAM 16.2 per token, disk 1.4 reads per token; the report's 90 GB reference is 25.5.
+
+**Superseded (2026-10-09).** The 28.1 figure is a measurement artifact. The replies averaged about 26 tokens, not the 256 the setup states, and short replies stay on VRAM-resident experts. Controlled 256-token replies on the same build measure 21.2-21.5 tok/s with 48 GB RAM (see E39). The VRAM, RAM and disk figures above come from the same short-reply run and are kept as recorded.
 
 **Decision.** Recorded as a local result only; recommended single-R9700 settings wait for the crash fix. The first attempt crashed once at 1.5K tokens (illegal memory access); the two scored passes were clean.
 
@@ -655,7 +663,7 @@ Invalid-route injection (all and partial NaN/Inf on primary, predicted, lookahea
 
 **Decision.** Both fixes apply after the rebase and pass the reproducers on GPU. #38 and #39 stay open upstream. The rebased PR branches were pushed 2026-10-09 and await a CUDA check.
 
-**Caveats.** CUDA was not built or run for this rebase. The earlier R9700 baselines (800/830 prefill, 28.1 decode) do not reproduce under this protocol even for #38 alone, so they are a stale baseline, not a regression. The R9700 decode level is a separate open question (see E39). Single requests per long-prompt size.
+**Caveats.** CUDA was not built or run for this rebase. The earlier R9700 baselines (800/830 prefill, 28.1 decode) do not reproduce under this protocol even for #38 alone, so they are a stale baseline, not a regression. The 28.1 decode was a short-reply artifact (see E39). The R9700 decode level is a separate open question (see E39). Single requests per long-prompt size.
 
 **Evidence.** local evidence: /ai/github/Maya-data/agent-tools/results/sol-rebase-38-39.md; local evidence: /ai/github/Maya-data/agent-tools/results/muse-local-integration.md; [#38](https://github.com/mw00/project-maya/pull/38); [#39](https://github.com/mw00/project-maya/pull/39)
 ### E32 - #44 breaks the HIP build (#52) (FIXED)

@@ -68,11 +68,16 @@ unchanged (the same tokens on V100s) before merging. Nothing was merged on an AI
 - **Strix Halo decode** (55.9 ms per token): dense matrix-vector work ~50% (already ~91% of memory bandwidth), expert
   kernels ~27%, attention and small kernels the rest. Tiers don't matter: 99.9% of experts are hit in GPU memory.
 - **One discrete card:** decode depends on how many experts are in VRAM and how misses are served. The CPU computes
-  part of the RAM-tier experts while PCIe carries the rest, and that split is worth ~11 tok/s on two GPUs.
+  part of the RAM-tier experts while PCIe carries the rest, and that split is worth ~11 tok/s on two GPUs. On one R9700,
+  `STRATA_GLM_RESERVE_MB=1024` (+5.3%) and a 90 GB RAM tier (+14.2%) add expert slots and speed decode (see README).
 - **Prompts:** MoE work ~45%, attention ~20% (less after #16), dense GEMMs ~20%. Host planning is negligible.
 
 ## Things that looked like bugs and weren't
 
+- **A decode regression that was a measurement artifact (2026-10-09).** A single-R9700 drop from 28.1 to about 22 tok/s
+  between v1.0.16 and later builds did not reproduce. The 28.1 run's replies averaged about 26 tokens, which stay on
+  VRAM-resident experts and decode faster. With 256-token replies both builds give 21.2-21.5 tok/s. Lesson: check the
+  output length of every benchmark reply before comparing speeds.
 - **A correction.** An intermittent GPU memory fault on two GPUs was first put down to another process using the cards.
   That was wrong. The first reproducible fault was in the RAM-shadow option (#15), and on Maya v1.0.14 it reproduced on
   one card within a few requests, always in the prefill of a new request. Lesson: "it went away for 80 rounds" isn't a
