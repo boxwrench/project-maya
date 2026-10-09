@@ -24,9 +24,23 @@ it is, how to run it, and what's next.
 | Two of the above (layer split + MTP drafting) | mixed is fine | Supported since v1.0.14 |
 | Strix Halo: Ryzen AI Max+ 395, Radeon 8060S | gfx1151 (RDNA3.5, unified memory) | Supported since v1.0.15 |
 
+## Quantization variants
+
+All three are mixed quants made directly from Z.ai's FP8 GLM-5.3-Flash release:
+
+| Quant | Model size | Routed expert gate/up | Routed expert down |
+|---|---|---|---|
+| Maya-S v2 (our tested model) | 96.5 GB | IQ2_XXS | IQ2_S; IQ3_XXS in sensitive layers |
+| Maya-M | 116.0 GB | IQ2_S | IQ3_XXS; IQ3_S in sensitive layers |
+| Maya-L | 156.3 GB | IQ3_S | IQ4_XS; Q5_K in sensitive layers |
+
+Sensitive layers here means the first and last four MoE layers. Attention and shared experts remain Q6_K
+in all three. See [QUANTS.md](QUANTS.md) for the full tensor recipes, source links, draft-layer formats and
+memory implications. M/L speeds have not been measured on our AMD machines.
+
 ## How fast
 
-Maya-S quant (IQ2_XXS experts), greedy, measured on our machines. These are setup-specific results: prompt lengths,
+Maya-S v2 mixed quant (IQ2_XXS gate/up experts), greedy, measured on our machines. These are setup-specific results: prompt lengths,
 ROCm versions and run counts differ, so the notes say when a number is a small or single run.
 
 | Setup | Prefill | Decode | Notes |

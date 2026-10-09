@@ -6,7 +6,8 @@ baseline, not a full benchmark or a matched AMD-versus-NVIDIA comparison.
 
 ## Setup and method
 
-GLM-5.3-Flash Maya-S (IQ2_XXS-based experts), Maya v1.0.23 integration with
+GLM-5.3-Flash Maya-S v2 (mixed quant; IQ2_XXS gate/up experts, see
+[QUANTS.md](QUANTS.md) for the full recipe), Maya v1.0.23 integration with
 #38/#39, ROCm 7.2.1, physical GPU 1, 131072 context, INT8 latents. RAM tier
 90 GB, reserve 1024 MB, PROMOTE_MIN 6. The frontend and engine run from the
 same integration tree. Before/after receipts confirm unchanged config,
