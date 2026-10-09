@@ -6,6 +6,10 @@ here has been sent there as pull requests, and most of it is merged. This page i
 it is, how to run it, and what's next.
 
 > **Status: experimental.** Linux with ROCm 7, text only. One GPU, or two discrete GPUs split by layers.
+>
+> **Known issue:** on a single RX 7900 XT (20 GB) with a 90 GB RAM tier, the RAM-resident tier (`STRATA_GLM_RAM_RESIDENT`)
+> and RAM shadows ([#15](https://github.com/mw00/project-maya/pull/15)) crash with "illegal memory access" within 2-4
+> requests. Don't use either on a 7900 XT. The default tiers are stable. Under investigation.
 
 ## What works
 
@@ -14,7 +18,7 @@ it is, how to run it, and what's next.
 | Radeon RX 7900 XT / XTX | gfx1100 (RDNA3) | Supported since Maya v1.0.11 |
 | Radeon AI PRO R9700 / RX 9070 | gfx1201 (RDNA4) | Supported since v1.0.11 |
 | Two of the above (layer split + MTP drafting) | mixed is fine | Supported since v1.0.14 |
-| Strix Halo: Ryzen AI Max+ 395, Radeon 8060S | gfx1151 (RDNA3.5, unified memory) | Works; installer support in [#17](https://github.com/mw00/project-maya/pull/17) |
+| Strix Halo: Ryzen AI Max+ 395, Radeon 8060S | gfx1151 (RDNA3.5, unified memory) | Supported since v1.0.15 |
 
 ## How fast
 
@@ -24,8 +28,8 @@ is the answer speed.
 | Setup | Prefill | Decode | Notes |
 |---|---|---|---|
 | RX 7900 XT (20 GB) | ~415 tok/s | ~15 tok/s | 16.4 with faster expert kernels ([#19](https://github.com/mw00/project-maya/pull/19)); ~19 with RAM shadows ([#15](https://github.com/mw00/project-maya/pull/15), on hold) |
-| AI PRO R9700 (32 GB) | ~500-620 tok/s | ~23-25.5 tok/s | 25.5 with the community tier PRs #24-#26 (RAM-resident tier + PROMOTE_MIN) |
-| Strix Halo (128 GB unified) | ~215 tok/s, ~251 with [#16](https://github.com/mw00/project-maya/pull/16) | ~17.8 tok/s | every expert fits in GPU memory |
+| AI PRO R9700 (32 GB) | ~500-620 tok/s | ~23-25.5 tok/s | 25.5 with RAM-resident tier + PROMOTE_MIN (v1.0.15) |
+| Strix Halo (128 GB unified) | ~251 tok/s (v1.0.15) | ~17.8 tok/s | every expert fits in GPU memory |
 | R9700 + RX 7900 XT | ~490 tok/s | ~34-36 tok/s | MTP drafts on the second card, ~76% accepted |
 
 The test box with the discrete cards has 192 GB of RAM, so experts that don't fit in VRAM come from pinned RAM rather
@@ -44,7 +48,7 @@ git clone https://github.com/mw00/project-maya && cd project-maya
 
 - Two cards: use `--gpus 0,1` instead of `--gpu 0`. Setup puts the larger card first.
 - GPU numbers follow the KFD order that `--check` prints.
-- `--bench` and `--report` work on AMD once [#18](https://github.com/mw00/project-maya/pull/18) is merged.
+- `--bench` and `--report` work on AMD (v1.0.15, [#18](https://github.com/mw00/project-maya/pull/18)).
 
 Upstream's [docs/AMD_MAYA.md](https://github.com/mw00/project-maya/blob/main/docs/AMD_MAYA.md) has the full setup
 notes.
@@ -56,11 +60,11 @@ notes.
 | [#2](https://github.com/mw00/project-maya/pull/2) | HIP memory fences for the GPU-to-CPU handoff | merged |
 | [#7](https://github.com/mw00/project-maya/pull/7) | Linux HIP setup, R9700, faster prompts (hipBLASLt tables, bigger sub-batches) | merged, v1.0.11 |
 | [#14](https://github.com/mw00/project-maya/pull/14) | Two GPUs with MTP drafting; one hipBLASLt table per card | merged, v1.0.14 |
-| [#15](https://github.com/mw00/project-maya/pull/15) | Opt-in RAM shadows: about 3x fewer SSD reads | on hold: crash found on v1.0.14, debugging |
-| [#16](https://github.com/mw00/project-maya/pull/16) | rocWMMA prompt attention + FP16 MLA (Strix prompts +16%) | being merged |
-| [#17](https://github.com/mw00/project-maya/pull/17) | Strix Halo: unified-memory sizing, installer support | approved; rebased |
-| [#18](https://github.com/mw00/project-maya/pull/18) | `--bench` / `--report` on AMD | being merged |
-| [#19](https://github.com/mw00/project-maya/pull/19) | Faster RDNA decode expert kernels (7900 XT +8.6%, bit-identical) | open |
+| [#15](https://github.com/mw00/project-maya/pull/15) | Opt-in RAM shadows: about 3x fewer SSD reads | on hold: crash under investigation |
+| [#16](https://github.com/mw00/project-maya/pull/16) | rocWMMA prompt attention + FP16 MLA (Strix prompts +16%) | merged, v1.0.15 |
+| [#17](https://github.com/mw00/project-maya/pull/17) | Strix Halo: unified-memory sizing, installer support | merged, v1.0.15 |
+| [#18](https://github.com/mw00/project-maya/pull/18) | `--bench` / `--report` on AMD | merged, v1.0.15 |
+| [#19](https://github.com/mw00/project-maya/pull/19) | Faster RDNA decode expert kernels (7900 XT +8.6%, bit-identical) | merged, v1.0.15 |
 
 Also see the [roadmap](ROADMAP.md) and the [engineering notes](NOTES.md).
 

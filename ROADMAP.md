@@ -5,12 +5,9 @@ RX 7900 XT come second.
 
 ## Now
 
-- **Validate the RAM-shadow ownership fix (#15).** The crash reproduces on one card during a later prompt, but both
-  failing logs had zero background promotions. The remaining lead is prompt lending: it made duplicate RAM copies and
-  later reclaimed slots without proving they owned the key's active mapping. Experimental commit `7646b6b` on
-  `exp/ram-shadow-debug` (Maya v1.0.16) fixes both paths. It has passed a low-RAM 1,024-boundary R9700 stress run; repeat
-  the original 90 GB test after the existing 7900 XT worker releases system RAM, where shadows actually survive between
-  prompts.
+- **Fix the full-RAM-tier crash** (affects RAM_RESIDENT from #25, released in v1.0.15, and RAM shadows #15): on a 7900 XT
+  with a 90 GB tier, crashes within 2-4 requests at the prompt-to-decode handoff; an ownership fix for shadows (7646b6b)
+  did not resolve it. Under investigation.
 - **Expert tiers on a single R9700: measured.** RAM-resident tier + `PROMOTE_MIN=6` (+ #24) gives 23.4 -> 25.55 tok/s
   (+9%) with zero disk reads. Earlier notes on this item: The R9700's 32 GB holds only part of the 86 GB of experts, so decode depends on
   how experts move between VRAM, RAM and SSD. Under test together:
@@ -27,6 +24,7 @@ RX 7900 XT come second.
   RDNA3/3.5 and left the R9700 on the old ones. Tuning them for gfx1201 is the obvious next decode step for the R9700.
 - **Long prompts on the R9700.** Maya v1.0.12 lifted the 8K prompt-chunk cap. Measure 16-32K prompts on a single R9700,
   where bigger chunks mean fewer passes over the experts that don't fit in VRAM.
+- **Recommended single-R9700 settings in the AMD docs** once the crash fix lands.
 - **Answer review comments** on the open PRs as they come in.
 
 ## Looked at, not worth it (for now)
