@@ -5,7 +5,7 @@ built only from records that exist: the upstream PR descriptions and comments, t
 reports. Where a number is a single run, a small run, or noisy, the entry says so. Where no record exists, the entry says
 that instead of filling the gap.
 
-Last built 2026-10-09; E40-E44 added in the hand-off refresh. A machine-readable copy is kept next to the benchmark data (`experiments.jsonl`, same IDs).
+Last updated 2026-10-09; E45-E46 record the R9700 follow-up audit and runtime comparison. A machine-readable copy is kept next to the benchmark data (`experiments.jsonl`, same IDs).
 
 ## How to read this
 
@@ -74,6 +74,7 @@ not controlled studies.
 | E43 | Tooling | DeepSeek Harness (dsh) set up for agent work | OPEN |
 | E44 | Quality | NIAH recall garbles exact digits | OPEN |
 | E45 | Prompt speed | R9700 transfer-window reuse audit | DROPPED |
+| E46 | Runtime | R9700 isolated TheRock runtime comparison | DROPPED |
 
 ## Prompt speed
 
@@ -861,13 +862,62 @@ already independent.
 Do not reduce the window to4096 or repeat E38's sub-batch sweep. Still-larger
 chunks via a larger loan would be a separate, unmeasured trade-off involving
 expert eviction/prestage capacity and decode recovery. An isolated ROCm10.2
-runtime/table comparison is being prepared first; no performance claim yet.
+runtime/table comparison completed in E46; no everyday switch.
 
 **Caveats.** Static code and startup evidence, not transfer profiling or a
 throughput A/B. Does not establish optimal loan/window size or hidden PCIe cost.
 
 **Evidence.** Local results/r9700-prompt-window-audit.md and its preserved
 everyday config/startup log; source src/core/glm_prefill.cu at a03b840.
+
+### E46 - R9700 isolated TheRock runtime comparison (DROPPED)
+
+**Question.** Does an isolated newer ROCm runtime/compiler and freshly tuned
+gfx1201 GLM table improve the current single-R9700 configuration?
+
+**Setup.** Same Maya v1.0.23 integration a03b840 and Maya-S-v2 pack, physical
+HIP1 R9700 32GB, 131072 INT8 context, RAM90GB/reserve1024MB, SUB2048,
+PREFILL_MB4096, PROMOTE_MIN6. ROCm7.2.1 versus pinned TheRock SDK
+`10.2.0a20261009` / hipBLASLt100500; isolated install/build, no system changes.
+Actual library mappings/hashes verified. Frozen usage seed cloned per arm.
+Order: baseline, nightly, baseline repeat. Same token-counted uncached
+payloads; two warmups, three scored 256-token decode replies per arm and
+three 32-token-output prefill requests at each prompt length.
+
+**Result.** Medians (ranges), tok/s:
+
+| Metric / actual prompt length | ROCm7.2.1 | Nightly | Baseline repeat |
+|---|---:|---:|---:|
+| Decode /1663–1665 tokens |25.8 (23.6–27.9)|28.0 (27.9–28.0)|26.0 (23.8–27.7)|
+| Prefill /8279–8335 tokens |787.1 (781.5–787.9)|537.3 (534.1–538.6)|785.0 (778.9–785.3)|
+| Prefill /33051–33143 tokens |783.9 (783.5–785.0)|580.5 (580.4–581.2)|781.9 (781.7–782.9)|
+
+Versus repeated baseline: observed decode +7.7%, prefill −31.6%/−25.8%.
+All33 full responses pass independent length/preflight/cache/receipt audit.
+All four correctness screens pass without skips. Fresh tuning:24 cases
+(12 matrix shapes at1024/2048), finite/no padding writes, worst relative
+L2 5.36e-06 / absolute0.002064. Effective chunk/sub/pool sizing matches.
+
+**Decision.** DROPPED as an everyday runtime switch. Keep ROCm7.2.1; original
+131072 server health, exact fox smoke and config/engine/table hashes restored.
+Do not advertise the observed decode increase as a clean kernel-speed win:
+all11 baseline-repeat replies match the original, none of the nightly's11
+match. Inspected guide outputs are coherent, not quality-parity evidence.
+
+**Caveats.** Runtime/compiler/table changed together. Nearest calibrated
+token bucket is used for actual remainders, which were not separately tuned;
+two selected Lt cases lose to hipBLAS and the fresh table is unfiltered.
+Automatic CPU-lane split, tier placement and numerical differences are not
+isolated; differing text changes routed-expert workload. No full-window
+128K prompt, kernel timing attribution or new quality/coding eval. Small
+request sample, not a blanket conclusion about all TheRock releases.
+Initial fixture-cwd/cache-log-parser harness failures are preserved, not
+misreported as numerical failures. No engine source changes.
+
+**Evidence.** Local results/muse-r9700-rocm10.md and its evidence directory:
+independent-audit.json, both outcomes, full requests/replies, receipts,
+library hashes, configs/CMake caches, parity/tuning logs and restored health.
+SDK/build logs under logs/r9700-rocm10-*. No new code push or PR.
 
 ## Lessons
 

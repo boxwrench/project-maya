@@ -33,13 +33,16 @@ RX 7900 XT come second.
 
 ## Next
 
-- **R9700 runtime comparison and transfer-window audit (authorized).** Prepare
-  an isolated pinned TheRock10.2 build and freshly tuned gfx1201 GLM table,
-  compare against ROCm7.2.1 with the same source and131072 INT8 config, then
-  restore the everyday server. No gain measured yet. The source/startup audit
-  confirms existing13312-token prompt chunks with2048-token compute sub-batches
-  and expert-wise weight reuse; the proposed missing4096-window separation
-  is already implemented ([E45](EXPERIMENTS.md#e45---r9700-transfer-window-reuse-audit-dropped)).
+- **R9700 follow-up decision: keep ROCm 7.2.1.** The isolated `10.2.0a20261009`
+  runtime/compiler plus fresh gfx1201 table passes four correctness screens but
+  loses 26–32% prefill versus a stable repeated baseline. Decode 28 versus 26 tok/s
+  uses different replies, so it is not an isolated kernel-speed gain. Original
+  131072 server restored; [E46](EXPERIMENTS.md#e46---r9700-isolated-therock-runtime-comparison-dropped)
+  records the negative switch decision and incomplete remainder tuning.
+  Independent 13312-token prompt chunks / 2048-token compute sub-batches and
+  expert-wise reuse already exist ([E45](EXPERIMENTS.md#e45---r9700-transfer-window-reuse-audit-dropped)).
+  A future lead is profiling the nightly's prompt regression or expert-tier
+  admission/exchange; neither has been launched. No repeat sub-batch sweep.
 - **Two-token decode step for single-GPU speculation.** Running two rows through the prompt path costs 8.2x a
   decode step, so speculation needs purpose-built two-row decode kernels (dense GEMV sharing weight reads, two-row
   experts and attention) at <= ~1.4x a step. Staged work with gates; stop at the first failed gate.
@@ -63,6 +66,7 @@ RX 7900 XT come second.
 | Single-GPU MTP via the prompt path | Parked: a 2-row verify through the existing batched path costs 8.2x a decode step (dense FP16 GEMMs dominate) and fails parity. Reopened as the two-row decode-kernel work above. Draft acceptance itself is good (75% greedy on Strix). |
 | RDNA4 decode expert kernels | Tuned and bit-identical (+18-29% in microbenchmarks) but only +1% end-to-end decode: experts are a small slice of a step. Parked. |
 | R9700 prefill sub-batch 1024 vs 2048 vs 4096 | No gain within noise (single samples); 4096 reads lower at 8K/28K. Keep 1024-2048. |
+| R9700 switch to TheRock `10.2.0a20261009` + fresh table | Correctness screens pass, but prefill loses 26–32%; observed decode improvement uses different replies. Keep ROCm 7.2.1, not a blanket judgment of all nightlies. |
 | Fused int8 WMMA prompt MoE (from [Strata](https://github.com/Niko1221/Strata)) | Ported and correct, but no end-to-end gain on the R9700 or RX 7900 XT so far. (On Strix Halo the fused path does win; see Now.) |
 | llama.cpp's RDNA4 MMQ patch ([#25940](https://github.com/ggml-org/llama.cpp/pull/25940)) | No repeatable gain for Maya's IQ formats. |
 | Shared expert on a second stream (Strix) | Correct, identical output, but within noise (17.2 vs 17.9 tok/s). |

@@ -6,7 +6,8 @@ here has been sent there as pull requests, and most of it is merged. This page i
 it is, how to run it, and what's next.
 
 > **Status: experimental.** Linux with ROCm 7, text only. One GPU, or two discrete GPUs split by layers. ROCm 10.2
-> TheRock nightlies have been evaluated on Strix Halo; the R9700 path is still to do.
+> TheRock nightlies have been evaluated on Strix Halo and R9700. The tested R9700 nightly regresses prompt speed;
+> keep its ROCm 7.2.1 everyday build ([E46](EXPERIMENTS.md#e46---r9700-isolated-therock-runtime-comparison-dropped)).
 >
 > **Known issue:** Maya v1.0.15/16 can still crash with "illegal memory access" on AMD. It happens most often with
 > long prompts and RAM-heavy modes (`STRATA_GLM_RAM_RESIDENT` and RAM shadows [#15](https://github.com/mw00/project-maya/pull/15)),
@@ -99,8 +100,12 @@ git clone https://github.com/mw00/project-maya && cd project-maya
 - `--bench` and `--report` work on AMD (v1.0.15, [#18](https://github.com/mw00/project-maya/pull/18)).
 
 Upstream's [docs/AMD_MAYA.md](https://github.com/mw00/project-maya/blob/main/docs/AMD_MAYA.md) has the full setup
-notes. The ROCm 10.2 Strix test used a TheRock nightly in a virtual environment; it did not change the system ROCm
-install. See [NOTES.md](NOTES.md#hip--rocm-lessons) for that evaluation path.
+notes. The ROCm 10.2 tests used isolated TheRock virtual environments; neither changed system ROCm.
+On R9700, nightly `10.2.0a20261009` plus a fresh gfx1201 table gave ~537/~581 prompt tok/s at
+8.3K/33.1K versus ~785/~782 on the repeated ROCm 7.2.1 baseline (128K reserved). Observed decode
+28 versus 26 tok/s used differing replies and is not a clean kernel-speed gain. Defaults are unchanged;
+see [E46](EXPERIMENTS.md#e46---r9700-isolated-therock-runtime-comparison-dropped) for gates and limitations,
+and [NOTES.md](NOTES.md#hip--rocm-lessons) for the earlier Strix evaluation path.
 
 ## Pull requests
 
