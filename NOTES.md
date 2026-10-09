@@ -6,9 +6,8 @@ Things we learned porting Maya to AMD, written for whoever picks this up next.
 
 This port was **AI-assisted, and we say so openly.** Most of the code, debugging and benchmarking was done by AI coding
 agents:
-- **Claude Code:** coordination, debugging, reviews, PRs.
-- **OpenAI Codex:** larger kernel and engine changes.
-- **Gemini:** research.
+- **Claude Code:** coordination.
+- **OpenAI Codex, Muse Spark and Gemini:** implementation, review and research.
 - **Smaller Claude agents:** benchmark runs.
 
 They ran on our own hardware. A person (boxwrench) directed the work, chose what to pursue, ran the machines, and
@@ -22,6 +21,8 @@ unchanged (the same tokens on V100s) before merging. Nothing was merged on an AI
 - **Desktop:** Ryzen 7 9800X3D, 192 GB DDR5, Radeon RX 7900 XT 20 GB (PCIe 4 x16) + Radeon AI PRO R9700 32 GB
   (PCIe 5 x16), Ubuntu, ROCm 7.2.1.
 - **"nimo":** Ryzen AI Max+ 395 (Strix Halo), Radeon 8060S, 128 GB unified memory, ROCm 7.2.2.
+- **ROCm 10 evaluation:** nimo also ran TheRock 10.2.0a20261009 in a virtual environment; the system ROCm install
+  was left unchanged.
 
 ## How we test
 
@@ -47,11 +48,20 @@ unchanged (the same tokens on V100s) before merging. Nothing was merged on an AI
   maintainer's CUDA box) does. Link `strata_engine` before `strata_prefill`.
 - **hipBLASLt tables:** they're per architecture and per hipBLASLt version (e.g. 100202). A mismatched table is
   silently ignored and falls back to plain hipBLAS, which on RDNA3 is several times slower for the prompt projections.
+- **ROCm 10 nightlies:** TheRock ships as pip wheels into a virtual environment, so it does not require a system
+  change. The hipBLASLt table must be retuned for each library version; the 10.2 nimo run used hipBLASLt table
+  version **100500**. A 100202 table is not a substitute.
 - **Build flag:** since Maya v1.0.12 a HIP build needs `STRATA_PREFILL_MMQ=ON`. Setup always sets it; hand-made builds
   must too.
 - **Strix Halo memory:** the "VRAM" the runtime reports on an APU is just the carve-out. Pinned host memory and the GPU
   pool come out of the same RAM, so size the pool from `MemAvailable` and don't keep a second pinned copy of the
   experts (#17).
+- **Pinned update buffers:** an async H2D copy from a pinned table-update buffer must finish before that buffer is
+  rewritten. Synchronizing a separate copy stream is not enough when the update is queued on the nonblocking stream;
+  the next prompt-lending boundary can otherwise change the source while the DMA is still reading it.
+- **IOMMU on Strix:** the setting affects performance. A separate Strix engine measured `amd_iommu=off` at 13-16%
+  faster prefill than passthrough on one machine, with the difference attributed to the power and clock envelope.
+  Maya has not measured this setting yet; it also changes DMA translation machine-wide.
 
 ## Where the time goes
 
@@ -64,23 +74,21 @@ unchanged (the same tokens on V100s) before merging. Nothing was merged on an AI
 ## Things that looked like bugs and weren't
 
 - **A correction.** An intermittent GPU memory fault on two GPUs was first put down to another process using the cards.
-  That was wrong. It is a real bug in the RAM-shadow option (#15), and on Maya v1.0.14 it reproduces on one card within
-  a few requests, always in the prefill of a new request. Lesson: "it went away for 80 rounds" isn't a root cause. Keep
-  the failing configuration and bisect it.
-- **RAM-shadow fault isolation (v1.0.16 follow-up).** Both captured failures reported zero background promotions, so
-  the promotion worker is not required to trigger the fault. The repeated prompt-lend path copied experts that already
-  had RAM shadows into new host slots and left boundary GC to reconcile the duplicates. Some eviction paths could then
-  clear `ram_of`/`rtab` even when the physical slot they reclaimed was an obsolete duplicate. Experimental commit
-  `7646b6b` in `/tmp/maya-shadow-debug` reuses an existing shadow and only clears mappings owned by the reclaimed slot.
-  It builds for gfx1100/gfx1201/gfx1151. A constrained 20 GB R9700 run passed ten requests and 1,024 decode boundaries,
-  but that tier was too small to retain shadows between prompts, so the original 90 GB reproducer still has to validate
-  the fix.
+  That was wrong. The first reproducible fault was in the RAM-shadow option (#15), and on Maya v1.0.14 it reproduced on
+  one card within a few requests, always in the prefill of a new request. Lesson: "it went away for 80 rounds" isn't a
+  root cause. Keep the failing configuration and bisect it.
+- **AMD illegal-memory-access root cause (review; fix verification ongoing).** The highest-priority race is the table
+  update described above: boundary A queues an H2D copy, then prompt lending or boundary B rewrites the same pinned
+  `upd_key_h`/`upd_val_h` buffers before the earlier DMA has consumed them. Device tables then disagree with the host's
+  slot ownership. Resident mode adds a second race where a background promotion can publish a slot after lending has
+  borrowed it. Corrupted weights can produce NaN router scores; the top-k routers retain `INT_MAX` for an all-NaN row
+  and then use it as a table index. The fix needs to wait on the right stream, retire moves before lending, and reject
+  invalid route IDs rather than clamp them into a plausible answer.
 - **Greedy output that differs between runs on HIP.** Expert placement decides which experts the CPU computes, and that
   changes floating-point rounding. Compare runs by coherence and acceptance, not exact text, unless you pin the tiers.
 
 ## Optimization tracking
 
-Leads are tracked privately with a lens called "direct enumeration of contributors": what work runs that can't affect
-the result? Each lead records its candidate and effectful work, a negative control, a correctness check, and the
-cheapest test that would kill it. Rejected leads are kept too. The "not worth it" table in the
-[roadmap](ROADMAP.md) is where those landed.
+Optimization leads are tracked with a simple question: what work runs that cannot affect the result? Each lead records
+its candidate and effectful work, a negative control, a correctness check, and the cheapest test that would kill it.
+Rejected leads are kept too. The "not worth it" table in the [roadmap](ROADMAP.md) is where those landed.

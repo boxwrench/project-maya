@@ -5,11 +5,14 @@ GLM-5.3-Flash, a 321-billion-parameter mixture-of-experts model, on ordinary PCs
 here has been sent there as pull requests, and most of it is merged. This page is the overview: what works, how fast
 it is, how to run it, and what's next.
 
-> **Status: experimental.** Linux with ROCm 7, text only. One GPU, or two discrete GPUs split by layers.
+> **Status: experimental.** Linux with ROCm 7, text only. One GPU, or two discrete GPUs split by layers. ROCm 10.2
+> TheRock nightlies have been evaluated on Strix Halo; the R9700 path is still to do.
 >
-> **Known issue:** on a single RX 7900 XT (20 GB) with a 90 GB RAM tier, the RAM-resident tier (`STRATA_GLM_RAM_RESIDENT`)
-> and RAM shadows ([#15](https://github.com/mw00/project-maya/pull/15)) crash with "illegal memory access" within 2-4
-> requests. Don't use either on a 7900 XT. The default tiers are stable. Under investigation.
+> **Known issue:** Maya v1.0.15/16 can still crash with "illegal memory access" on AMD. It happens most often with
+> long prompts and RAM-heavy modes (`STRATA_GLM_RAM_RESIDENT` and RAM shadows [#15](https://github.com/mw00/project-maya/pull/15)),
+> and occasionally with the default tiers. Review found an async table-update race, a resident-mode background-promotion
+> race, and a router path that indexes `INT_MAX` after NaN scores. A fix is being verified. Until then, on one R9700 or
+> RX 7900 XT keep prompts short and use the default tiers. Strix Halo has run 8-30K-token prompts cleanly.
 
 ## What works
 
@@ -22,15 +25,15 @@ it is, how to run it, and what's next.
 
 ## How fast
 
-Maya-S quant (IQ2_XXS experts), 8K context, greedy, measured on our machines. Prefill uses 4K-token prompts; decode
-is the answer speed.
+Maya-S quant (IQ2_XXS experts), greedy, measured on our machines. These are setup-specific results: prompt lengths,
+ROCm versions and run counts differ, so the notes say when a number is a small or single run.
 
 | Setup | Prefill | Decode | Notes |
 |---|---|---|---|
-| RX 7900 XT (20 GB) | ~415 tok/s | ~15 tok/s | 16.4 with faster expert kernels ([#19](https://github.com/mw00/project-maya/pull/19)); ~19 with RAM shadows ([#15](https://github.com/mw00/project-maya/pull/15), on hold) |
-| AI PRO R9700 (32 GB) | ~500-620 tok/s | ~23-25.5 tok/s | 25.5 with RAM-resident tier + PROMOTE_MIN (v1.0.15) |
-| Strix Halo (128 GB unified) | ~251 tok/s (v1.0.15) | ~17.8 tok/s | every expert fits in GPU memory |
-| R9700 + RX 7900 XT | ~490 tok/s | ~34-36 tok/s | MTP drafts on the second card, ~76% accepted |
+| RX 7900 XT (20 GB) | ~415 tok/s | ~15-16.4 tok/s | Local v1.0.15 baseline; [#19](https://github.com/mw00/project-maya/pull/19) reports ~16.4 with faster RDNA3/3.5 kernels. RAM shadows [#15](https://github.com/mw00/project-maya/pull/15) are on hold. |
+| AI PRO R9700 (32 GB) | ~749-830 tok/s | 28.1 tok/s | v1.0.16. [#38](https://github.com/mw00/project-maya/pull/38) measured ~749-801 at ~4K and ~828-830 at ~8K in two-request checks; the typical-user report measured 749-781 at 8-20K. Decode is two clean scored passes with 48 GB RAM and `PROMOTE_MIN=6`, so treat it as a local result. |
+| Strix Halo (128 GB unified) | 258-273 tok/s (ROCm 7.2.2); 276/290/283 tok/s at 4/8/16K (ROCm 10.2 nightly) | 17.2-17.8 tok/s | v1.0.16 sweep, best `SUB=4096`. One ROCm 10.2 comparison was stable and added 5-11% to prefill; decode was unchanged. 64K setup is in progress. |
+| R9700 + RX 7900 XT | ~490 tok/s | ~34-36 tok/s | Local two-GPU v1.0.15 run; [#14](https://github.com/mw00/project-maya/pull/14), MTP drafts on the second card, ~76% accepted. |
 
 The test box with the discrete cards has 192 GB of RAM, so experts that don't fit in VRAM come from pinned RAM rather
 than the SSD. With less RAM, decode is slower.
@@ -51,7 +54,8 @@ git clone https://github.com/mw00/project-maya && cd project-maya
 - `--bench` and `--report` work on AMD (v1.0.15, [#18](https://github.com/mw00/project-maya/pull/18)).
 
 Upstream's [docs/AMD_MAYA.md](https://github.com/mw00/project-maya/blob/main/docs/AMD_MAYA.md) has the full setup
-notes.
+notes. The ROCm 10.2 Strix test used a TheRock nightly in a virtual environment; it did not change the system ROCm
+install. See [NOTES.md](NOTES.md#hip--rocm-lessons) for that evaluation path.
 
 ## Pull requests
 
@@ -65,6 +69,13 @@ notes.
 | [#17](https://github.com/mw00/project-maya/pull/17) | Strix Halo: unified-memory sizing, installer support | merged, v1.0.15 |
 | [#18](https://github.com/mw00/project-maya/pull/18) | `--bench` / `--report` on AMD | merged, v1.0.15 |
 | [#19](https://github.com/mw00/project-maya/pull/19) | Faster RDNA decode expert kernels (7900 XT +8.6%, bit-identical) | merged, v1.0.15 |
+| [#24](https://github.com/mw00/project-maya/pull/24) | PCIe link wake and RAM-demotion serving | merged, v1.0.15 |
+| [#25](https://github.com/mw00/project-maya/pull/25) | RAM-resident expert tier | merged, v1.0.15 |
+| [#26](https://github.com/mw00/project-maya/pull/26) | `PROMOTE_MIN`, to avoid one-off promotions | merged, v1.0.15 |
+| [#38](https://github.com/mw00/project-maya/pull/38) | RDNA4 `wmma2` prompt attention | open; R9700 verification complete |
+
+The community PRs #24-#26 were merged in v1.0.15; the HIP fix needed by #24 is in upstream too. [#15](https://github.com/mw00/project-maya/pull/15)
+is open and on hold while the crash is fixed.
 
 Also see the [roadmap](ROADMAP.md) and the [engineering notes](NOTES.md).
 
