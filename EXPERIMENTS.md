@@ -73,6 +73,7 @@ not controlled studies.
 | E42 | Quality | Tool-calling 400s were a stale frontend | FIXED |
 | E43 | Tooling | DeepSeek Harness (dsh) set up for agent work | OPEN |
 | E44 | Quality | NIAH recall garbles exact digits | OPEN |
+| E45 | Prompt speed | R9700 transfer-window reuse audit | DROPPED |
 
 ## Prompt speed
 
@@ -840,6 +841,33 @@ Invalid-route injection (all and partial NaN/Inf on primary, predicted, lookahea
 **Caveats.** Preview software. Small arithmetic task, no failed-test repair needed; not evidence of large-project performance or autonomous recovery.
 
 **Evidence.** coordinator session notes, 2026-10-09; local results/dsh-maya-smoke-20261009.md, logs/dsh-maya-smoke-20261009.log.jsonl, before/after receipts.
+
+### E45 - R9700 transfer-window reuse audit (DROPPED)
+
+**Question.** Is separate expert-transfer window sizing versus compute sub-batch
+sizing a missing R9700 optimization, as suggested by the other-engine review?
+
+**Setup.** Read-only source audit of the v1.0.23 integration at a03b840 and
+the current R9700 startup log:131072 INT8 context, RAM90GB, reserve1024MB,
+PREFILL_MB4096, SUB2048, prefill auto. No GPU requests or server changes.
+
+**Result.** The effective prompt chunk is13312 tokens, mixer sub-batches2048,
+with4086MB borrowed and160 expert prestage slots. The planner groups token
+routes per expert over the chunk; each staged group member's weights are
+copied before processing its routed rows. Chunk and compute sub-batch are
+already independent.
+
+**Decision.** DROPPED as a missing-feature port: the mechanism already exists.
+Do not reduce the window to4096 or repeat E38's sub-batch sweep. Still-larger
+chunks via a larger loan would be a separate, unmeasured trade-off involving
+expert eviction/prestage capacity and decode recovery. An isolated ROCm10.2
+runtime/table comparison is being prepared first; no performance claim yet.
+
+**Caveats.** Static code and startup evidence, not transfer profiling or a
+throughput A/B. Does not establish optimal loan/window size or hidden PCIe cost.
+
+**Evidence.** Local results/r9700-prompt-window-audit.md and its preserved
+everyday config/startup log; source src/core/glm_prefill.cu at a03b840.
 
 ## Lessons
 

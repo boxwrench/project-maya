@@ -33,6 +33,13 @@ RX 7900 XT come second.
 
 ## Next
 
+- **R9700 runtime comparison and transfer-window audit (authorized).** Prepare
+  an isolated pinned TheRock10.2 build and freshly tuned gfx1201 GLM table,
+  compare against ROCm7.2.1 with the same source and131072 INT8 config, then
+  restore the everyday server. No gain measured yet. The source/startup audit
+  confirms existing13312-token prompt chunks with2048-token compute sub-batches
+  and expert-wise weight reuse; the proposed missing4096-window separation
+  is already implemented ([E45](EXPERIMENTS.md#e45---r9700-transfer-window-reuse-audit-dropped)).
 - **Two-token decode step for single-GPU speculation.** Running two rows through the prompt path costs 8.2x a
   decode step, so speculation needs purpose-built two-row decode kernels (dense GEMV sharing weight reads, two-row
   experts and attention) at <= ~1.4x a step. Staged work with gates; stop at the first failed gate.
