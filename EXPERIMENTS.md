@@ -76,6 +76,7 @@ not controlled studies.
 | E45 | Prompt speed | R9700 transfer-window reuse audit | DROPPED |
 | E46 | Runtime | R9700 isolated TheRock runtime comparison | DROPPED |
 | E47 | Shared decode | Two-row decode / single-GPU speculation prototype | OPEN |
+| E48 | Prompt speed | gfx1151 fused MoE on v1.0.26 | KEPT |
 
 ## Prompt speed
 
@@ -159,7 +160,7 @@ On Strix Halo f16q measured 251 tok/s against 237-247 for wmma2 at 4-7K prompts,
 
 A 556-token prompt with 200-token decode measured 18.1 ON and 18.0 OFF (noise, as expected for a prefill-only change). The earlier run, made before the fix and with parity failing, was one request per cell at +8.5% (4K), +5.8% (8K) and +5.0% (16K); it is not usable as a result.
 
-**Decision.** Fixed and measured on Strix (gfx1151). Not yet PR'd: the commit needs a rebase onto current upstream. The gfx11 runtime gate admits gfx1151 only. The RX 7900 XT (gfx1100) keeps MMQ; enabling it needs a gfx1100 kernel image, an allowlist entry, and its own parity and A/B runs on that card.
+**Decision.** Fixed and measured on Strix (gfx1151). Rebased to v1.0.26 and freshly validated in E48; still no code push or PR. The gfx11 runtime gate admits gfx1151 only. The RX 7900 XT (gfx1100) keeps MMQ; enabling it needs a gfx1100 kernel image, an allowlist entry, and its own parity and A/B runs on that card.
 
 **Caveats.** Three repeats per size, run sequentially, with no confidence interval; prompt sizes differ from the earlier run. Greedy text is not byte-identical between ON and OFF (floating-point and quantization differences). The coherence checks are smoke tests, not a quality evaluation. No gfx1100 or gfx12 hardware run.
 
@@ -967,13 +968,60 @@ dependent traces retained; causality of profile-related divergence unisolated.
 **Restoration.** Fresh live health262144/version1.0.24, exact everyday
 maya-nimo-256k.json path and sole GPU engine verified. Receipt configfb3b0737…,
 engine99b0279c… and table2cd69361… match the producer's restart-before receipt.
-Fused-v1026 worker failed on quota before running; exact queued retry remains
-waiting for21:38:22UTC, with ownership/health checks. No new PR/code push.
+Fused-v1026 initially failed on quota; its exact queued retry subsequently
+finished and is independently audited in E48. No new PR/code push.
 
 **Evidence.** Local results/muse-tworow-decode.md and results/muse-tworow/
 independent-audit-20261009.json, raw responses/traces/receipts, fresh restored
 receipt and evidence hashes; complete remote harness/profile/failed-run
 snapshot and temporary gate logs preserved durably. Original producer report retained.
+
+### E48 - gfx1151 fused MoE on v1.0.26 (KEPT)
+
+**Question.** Does the gfx1151 clamp fix retain parity and prefill gains on
+current-base v1.0.26 without changing the binary between arms?
+
+**Setup.** Nimo gfx1151 only; source0035dbe on v1.0.26/7f7890f, clean before/after,
+TheRock runtime, HIP ON/CUDA OFF, MMQ/native experts ON. One engine01ecf8ab…,
+context65536 FP16, prefill32768, SUB4096, MB12288, S-v2 IQ2_XXS, table100500.
+Only fused1/0 plus usage/log destinations differ. Three requests per size,
+ON then OFF, temperature0, 32 actual output tokens each; cache0 throughout.
+
+| Actual prompt tokens | ON median (range) tok/s | OFF median (range) tok/s | Gain |
+|---|---|---|---|
+| 4161–4178 | 333.2 (330.8–334.4) | 299.5 (297.3–299.7) | +11.3% |
+| 8286–8334 | 338.3 (336.2–339.1) | 316.0 (314.1–316.2) | +7.1% |
+| 16541–16585 | 329.4 (329.0–332.7) | 313.4 (312.7–316.2) | +5.1% |
+
+**Audit.** All22 raw requests match their summaries and regenerated prompt
+hashes; full lengths verified (except intentional 2-token fox replies).
+48 fused cases pass without SKIP, relative L2 vs MMQ8.67705e-8–1.01027e-4;
+MMQ/layer/model/attention gate logs pass. Help output present, rc0 producer-
+reported. Config/exe/table hashes and boot state stable across arm receipts.
+Prefill text matches6/9; warm-up texts differ despite both reaching200 tokens
+at18.1 tok/s. Both fox checks return Fox: smoke, not task-quality parity or
+a general decode-equivalence result.
+
+**Caveats.** Saved API counts are one below actual prompt_n; conservative
+17000+200 capacity check covers all requests. Historical per-request checks
+and fresh-count timing before ON are not established. Seedbd8e285c… preserved,
+but identical initial clones are producer-reported without per-arm initial
+hash manifests. ldd resolves TheRock; benchmark process maps/library hashes
+not saved. Three samples, one order, no CI; no gfx1100/gfx1201/CUDA execution,
+long-context/quality rerun, hip_intrinsics build or speculation validation.
+
+**Decision/restoration.** Keep the locally validated gfx1151 fix for PR preparation,
+not a new default or upstream merge. Fresh independent receipt/live checks
+verify maya-nimo-256k.json262144/v1.0.24, original configfb3b0737…,
+engine99b0279c… and table2cd69361…; engine219105 is sole GPU owner.
+Only owned orphan launch shell219100 was closed to release stuck SSH;
+detached server survived, producer and queue exited. Both authorized jobs
+finished; no GPU job queued behind them and no code push/PR/comment.
+
+**Evidence.** Local results/muse-fused-v1026-validation.md, raw gate/request/
+receipt/config/build logs, audit.py, independent-audit-20261009.json,
+audit-evidence-hashes-20261009.json, audit-restored-20261009.json and preserved
+producer report/profile/harness/CMakeCache files. Evidence class D.
 
 ## Lessons
 

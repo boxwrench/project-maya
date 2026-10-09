@@ -17,7 +17,8 @@ RX 7900 XT come second.
 - **Everyday context configs.** R9700: 128K INT8 latents, decode ~25 tok/s, prompt ~782 tok/s at
   8K / ~743 at 119K. Strix Halo: 262144 FP16, ~343/337/327/314 prompt tok/s at 8K/32K/64K/120K;
   reserving the larger window costs at most 1.6% at matched lengths. Expert capacity is preserved, but prompt
-  lending still evicts residents and decode fetches from disk. The two-row worker restores this config at completion.
+  lending still evicts residents and decode fetches from disk. The two-row and fused validations are finished;
+  the exact 262144 everyday config/binary/table restoration is independently verified.
 - **Quality baseline and local showcase route validated.** Fresh R9700 128K run: math 37/40, MMLU-Pro 48/56,
   HumanEval 30/30 (grader-context correction audited), IFEval 29/40 strict / 35/40 loose, tools 11/12.
   All 183 cases completed without request errors or truncation; five writing outputs have constraint misses.
@@ -29,7 +30,10 @@ RX 7900 XT come second.
 - **Fused WMMA prompt MoE for gfx1151: PR preparation.** The tested v1.0.16 prototype gives +13/+7.5/+4.8%
   Strix prefill at 4/8/16K. It applies cleanly to v1.0.26; preparation restricts runtime dispatch to gfx1151 and
   preserves MMQ scratch on other devices or with the switch disabled. Current-main engine/parity targets compile
-  for gfx1151/gfx1100/gfx1201; Python checks pass. Fresh Strix runtime validation is pending.
+  for gfx1151/gfx1100/gfx1201; Python checks pass. Fresh v1.0.26 Strix validation passes 48 fused-parity
+  cases plus MMQ/layer/model/attention screens. Same-binary prefill gains are +11.3/+7.1/+5.1%
+  at ~4K/~8K/~16K; [E48](EXPERIMENTS.md#e48---gfx1151-fused-moe-on-v1026-kept)
+  records raw-audit and provenance limits. No code push or PR yet; other GPU hardware untested.
 
 ## Next
 
@@ -49,7 +53,7 @@ RX 7900 XT come second.
   different ON/OFF binaries and missing final-build selftest evidence. See
   [E47](EXPERIMENTS.md#e47---two-row-decode--single-gpu-speculation-prototype-open).
   No default switch; gfx1201/gfx1100 untested. Future final-build/same-binary
-  validation is separate from the already-queued fused-v1026 validation.
+  validation would be new work. Fused-v1026 validation is complete; no GPU job is queued behind it.
 - **NIAH digit precision.** Long-context recall sometimes garbles exact digits (4817->4481) while multi-hop sums
   score 3/3 on the R9700. Quant precision is one hypothesis; the Strix FP16 sample used different needles and
   reported no misses, so the cause is not established. The short-task eval is a sanity baseline, not a controlled

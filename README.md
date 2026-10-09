@@ -76,6 +76,12 @@ than the SSD. With less RAM, decode is slower.
 > but the reply texts were not retained for independent rescoring. This is a small recall sample, not a general
 > quality result. Longer actual prompts still reduce decode speed; the small reservation cost is a separate finding.
 
+Current-base gfx1151 fused-MoE validation (v1.0.26): same-binary prefill
++11.3%/+7.1%/+5.1% at ~4K/~8K/~16K; 48 fused-parity cases pass.
+Small sequential samples, provenance gaps and 3/9 changed prefill replies
+prevent a quality-equivalence claim. Everyday 262K server restored; no new
+default/code push. See [E48](EXPERIMENTS.md#e48---gfx1151-fused-moe-on-v1026-kept).
+
 ## Quality sanity check
 
 The shared single-GPU speculation prototype on Strix has an independently
