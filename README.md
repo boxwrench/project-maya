@@ -77,7 +77,7 @@ install. See [NOTES.md](NOTES.md#hip--rocm-lessons) for that evaluation path.
 The community PRs #24-#26 were merged in v1.0.15; the HIP fix needed by #24 is in upstream too. [#15](https://github.com/mw00/project-maya/pull/15)
 is open and on hold while the crash is fixed.
 
-Also see the [roadmap](ROADMAP.md) and the [engineering notes](NOTES.md).
+Also see the [roadmap](ROADMAP.md), the [engineering notes](NOTES.md) and the [experiment log](EXPERIMENTS.md).
 
 ## Credits
 
