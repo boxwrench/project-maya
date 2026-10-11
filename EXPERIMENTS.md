@@ -5,7 +5,7 @@ built only from records that exist: the upstream PR descriptions and comments, t
 reports. Where a number is a single run, a small run, or noisy, the entry says so. Where no record exists, the entry says
 that instead of filling the gap.
 
-Last updated 2026-10-11; E49-E69 consolidate the current working records (source, CPU, build and GPU audits), E70-E77 record the v1.0.32 everyday measurements, and E79-E90 record the 2026-10-11 Strix decode/R9700 tuneup work. A machine-readable copy is kept next to the benchmark data (`experiments.jsonl`, same IDs).
+Last updated 2026-10-11; E49-E69 consolidate the current working records (source, CPU, build and GPU audits), E70-E77 record the v1.0.32 everyday measurements, E79-E90 record the 2026-10-11 Strix decode/R9700 tuneup work, and E91-E99 the afternoon's verify-fuse, prefill, quality-bar and dual-card results. A machine-readable copy is kept next to the benchmark data (`experiments.jsonl`, same IDs).
 
 ## How to read this
 
@@ -116,6 +116,15 @@ not controlled studies.
 | E88 | Decode speed | Strix MLA attention split-K retune and hierarchical combine | CLOSED-no-gain |
 | E89 | Decode speed | Strix PR #96 MTP config-knob sweep | CLOSED-no-gain |
 | E90 | Decode speed | Strix MTP verify-round cost split (C2/T) | MEASURED |
+| E91 | Decode speed | Strix #96 verify round: batched MLA `k_b/v_b` + fused union routed MoE | KEPT |
+| E92 | Decode speed | nimo everyday: verify-fuse build adopted | ADOPTED |
+| E93 | Public-source research | ROCmFPX #37-#52 mapped to Maya GLM-5.3 prefill | LEAD |
+| E94 | Prompt speed | Strix prefill ceiling, per-phase excess and three levers | CLOSED-no-gain |
+| E95 | Decode speed | Single R9700 PR #103 trunk keep | MEASURED |
+| E96 | Prompt speed | Strix ROCmFPX #44 chunk-fastest MMQ activation quant | CLOSED-no-gain |
+| E97 | Prompt speed | Strix prompt MoE expert-quant microbench (hypothesis 1h) | CLOSED-no-gain |
+| E98 | Quality | Quality bar for approximate speed levers | DESIGN |
+| E99 | Two GPUs | Dual R9700 + 7900 XT Maya-S retune on v1.0.33 | MEASURED |
 
 ## Prompt speed
 
@@ -1498,6 +1507,9 @@ of the 11 arms beat baseline: LAND=96 336.8, RAM_GB=4 338.0, RAM_GB=8 335.4, RAM
 - **Keep dropped ideas written down.** E05, E06, E15-E17 and E24 record why not, so they are not re-run.
 - **Say what you did not measure.** A sampled AMD short-task baseline exists (E35), but no matched NVIDIA control or AMD KL/perplexity. E40/E41 cover current long-context configs; the two-GPU #44 run remains pending (E24).
 - **Gate kernel changes with speculation off.** With #96 MTP speculation on, end-to-end decode tracks acceptance, which moves with tiny numerical changes (an MLA rounding change moved acceptance 58% -> 68% and decode ~19 <-> ~22 tok/s), so spec-on e2e is not a valid gate; gate kernel work with `STRATA_GLM_NO_SPEC=1` (or GPU-busy ms) and gate the spec policy separately with acceptance reported (E88, E90).
+- **A spec-sheet peak is not a measurement.** Strix's assumed "theoretical peak" of 59 TFLOPS was the 2x-FP32/WMMA spec; the WMMA f16 figure is ~30 TFLOPS and the measured hipBLASLt f16 peak is 24.2 TFLOPS (20.9 at the prefill clock). At the prefill clock Strix runs ~2.47 GHz at 85 W in the stock "balanced" power mode. Against the measured ceiling the engine is at ~50%, not 21% (E94).
+- **KL is a diagnostic, not the decision.** Maya's own KL(FP8||Maya-S) = 0.43 and Maya-M = 0.33 with equal 5-task accuracy (80.7 vs 80.8): lower KL did not mean better tasks. KL and top-1 agreement measure the volume of divergence, not its direction, so use them as a screen/tripwire and decide on paired task cases (E95, E98).
+- **Sub-gate wins are bundled, not dropped.** A lever that misses a per-arm gate can still stack: `PREFILL_SUB=8192` was +1.7% at 32K (E94), the MMQ chunk-fastest quant +0.6-0.8% on the fallback path (E96), and wmma2 on the second card +2.9/+5.7% (E99). Combine and re-measure the bundle rather than discarding each for missing a gate alone (E94, E96, E99).
 
 ### E78 - Strix: upstream PR #96 MTP vs our two-row spec loop (KEPT-OPEN: support #96; our loop DROPPED as primary)
 
@@ -1734,3 +1746,111 @@ Report: `results/ds-nimo-decode-kernels.md`, evidence
 **Decision.** MEASUREMENT ONLY (no kernel change). Recommend a truly fused union read (idea B) reusing the union plan, gated on NO_SPEC busy-ms; cheaper first step is batching MLA k_b/v_b. Everyday server restored, `/health` ok. Do not post.
 
 **Caveats.** Strix only; 33-round route log; one 1.6K prompt. Report: `results/ds-nimo-verify-cost.md`, evidence `results/ds-nimo-verify-cost/`.
+
+### E91 - Strix (gfx1151) PR #96 verify round: batched MLA `k_b/v_b` (A) + fused union routed MoE (B) (KEPT: A+B cuts the T=2 verify round 78.09 -> 73.94 ms, C2/T 1.43 -> 1.35, bit-identical with no NO_SPEC regression)
+
+**Question.** E90 predicted that batching the absorbed MLA `k_b`/`v_b` GEMVs and fusing the routed MoE union read would remove ~4.7 ms from the T=2 MTP verify round. Do the two bounded prototypes actually deliver it?
+
+**Setup.** nimo, gfx1151, worktree `maya-verify-fuse` (branch `exp/verify-fuse-gfx1151`), base `nimo/next2` `3fca883`, commit `d119b72`, exe `6136fe7d`; TheRock ROCm 10.2, `RAM_GB=8`, wmma2, greedy; fresh server + `receipt.sh` + preflight per arm, one 1.6K-prompt request, FIXED=1 (139 rounds, 83.5% accept, 1.84 tok/round, the same prompt for every arm); scratch config copies only (`maya-nimo-next.json` sha `73cf17b3` untouched). (A) `mla_kb_rows`/`mla_vb_rows` read each absorbed `k_b`/`v_b` weight row once and dot every row's activation (`rows_dot_bf16_ptrs`), with the attention split out as `mla_attention`. (B) `fast_moe_rows` routes both rows, saves the plans, builds a device `MoePlan2` union, and fused union gate/up (IQ2_XXS) and down (IQ3_XXS) kernels read each union expert's weight once for both rows; the shared expert's down rides the union gate/up launch, and row 1 gets its own 8 scratch slots.
+
+**Result.** Verify round: base 78.09 ms, p0 (in-binary per-row) 78.13, **A** 75.61 (-2.52), **B** 76.48 (-1.65), **A+B** **73.94** (-4.19 vs p0). `glm stat` decode 45.37 -> 44.03 / 44.52 / **43.14** ms/token; C2/T 1.428 -> **1.352**; NO_SPEC step flat (54.70 -> 54.71). `v_mla` profile 13.048 -> 10.402. B nets -1.65, not the predicted -4.7: the union read saving is partly offset by the union kernels, and reading the shared down once was traded for overlapping it in the union gate/up launch. Default-config e2e (informational) 4-type mean 22.70 -> **23.68** (+4.3%), 33K +5.4%; acceptance matches exactly on the four short types. Parity PASS: `glm_layer_parity`, `glm_model_test`, `glm_mv_bench --parity-only`, `hip_expert_kernel_bench --parity-only`; first-window logits + head hidden byte-identical (max_abs 0) for p0 vs A vs A+B; greedy FIXED=1 base vs A+B identical text on chat/code/reasoning x128.
+
+**Decision.** KEPT: A+B clears the >=3 ms gate with no NO_SPEC regression and is bit-identical, so switch the everyday Strix build to this branch after shared-code validation. Offer A upstream as a clean follow-up to #96; offer B separately (new kernels + the 16-slot scratch) and record that it nets -1.65 ms, not -4.7. Do not post.
+
+**Caveats.** Strix only, gfx1151 and the Maya-S IQ2_XXS/IQ3_XXS pack; one 1.6K prompt; `v_moe_rows` stream intervals drift ~2 ms so they cannot resolve B. Report: `results/ds-nimo-verify-fuse.md`, evidence `results/ds-nimo-verify-fuse/`, nimo `~/verify-fuse-2026/`.
+
+### E92 - nimo everyday: verify-fuse build adopted (ADOPTED: `maya-nimo-next.json` now runs the verify-fuse exe `6136fe7d`; default decode +4.3%, 33K +5.4%)
+
+**Question.** Should the nimo everyday server switch to the verify-fuse build (E91)?
+
+**Setup.** nimo, gfx1151; `maya-nimo-next.json` exe/cwd -> `maya-verify-fuse` (`exp/verify-fuse-gfx1151` `d119b72`, exe `6136fe7d`); `wmma2` and `RAM_GB=8` kept; backup `maya-nimo-next.json.bak-preverifyfuse`.
+
+**Result.** The verify round gains batched MLA `k_b/v_b` and fused union routed MoE; bit-identical, verify 78.1 -> 73.9 ms; default decode +4.3% (33K +5.4%); parity PASS (E91).
+
+**Decision.** ADOPTED.
+
+**Caveats.** The branch is gfx1151 plus the Maya-S pack, so shared-code changes still need R9700 validation later. Report: `results/ds-nimo-verify-fuse.md`.
+
+### E93 - ROCmFPX TheTom PRs #37-#52 mapped to Maya GLM-5.3 prefill (LEAD: none of the 16 PRs targets GLM; only #44 lands on an identical Maya kernel)
+
+**Question.** Do TheTom's ROCmFPX #37-#52 (Qwen3.8-Flash-Next HC-Q8 on Strix Halo) contain prefill levers transferable to Maya GLM-5.3, and do they explain the flat-to-128K claim?
+
+**Setup.** Public-source research only: `gh pr view`/`gh pr diff` for ROCmFPX/ROCmFPX #37-#52 (merged 2026-10-09/10) plus Maya v1.0.32 source at `/ai/github/maya-main`. No GPU, build, server, request, post or push.
+
+**Result.** All 16 PRs are qwen4exp / Qwen3.8-Flash-Next HC-Q8 on gfx1151 + ROCm 7.2.1 (plus one CUDA build fix, #47); **none** targets GLM-5.3, Gorgon 8065S, or the GLM KDA/DSA path. The only gated-delta-net PR (#45, chunked GDN WMMA, C=16) dispatches scalar gate only and explicitly falls back for KDA/vector gates — which is what Maya's GLM KDA is (`glm_batch.cu:280`). Maya's KDA prompt recurrence is serial per token (`kda_rec_kernel`, one block/head, F32 FMA) and `kda_rec` is only 4.9-5.0% of Strix prefill. Only **#44** lands on an identical Maya kernel: the vendored `ggml-cuda/quantize.cu` `quantize_mmq_q8_1` still grids token=`blockIdx.x` / chunk=`blockIdx.y`, called per MoE layer from `prefill/moe_mmq.cu:117`; #44 makes the chunk fastest (author +1.6..4.6% at ub2048-8192). HC fusions #43/#48/#50 are largely already present in Maya (`hc_update`+`hc_finish` fuse combine/gates/Sinkhorn/joint RMS); #48's Q8_1 copy is N/A (Maya dense is f16, not MMQ); #41's BF16-WMMA 4-bit path matches Maya's prior negative (E57/E60). The X-post flat-to-128K curve is not explained by these PRs: ours drops ~8-10% via the DSA indexer (`glm_dsa_select` O(n_vis^2)) while qwen4exp uses a bounded QSA window (#51). Author gains: #44 ub8192 +4.6%, #45 pp4096 ub1024 +3.7%, #48 ub8192 +3.6%, #50 ub8192 +3.8%, #49 decode +10.6%, #52 decode +11.4%.
+
+**Decision.** Record as LEAD (public source map). Ranked Maya-applicable levers: (1) port #44's chunk-fastest `quantize_mmq_q8_1` — exact same vendored kernel; (2) #45-style chunked KDA recurrence — high effort, <=5% cap, needs a vector-gate derivation; (3) #37-style few-row path for the N=24 HC mix GEMM; (4) #43/#50 HC fusion audit. Confirm each with `STRATA_GLM_PROF` prefill at 8K/32K/64K plus in-kernel time, not with author numbers on a different model/GPU. Do not credit #37-#52 for the GLM flat-to-128K claim.
+
+**Caveats.** No GLM-5.3/Gorgon model among the PRs; author numbers not independently reproduced; the X-post context axis is not a proven prompt-token count (E68); #45 would need a new vector-gate derivation and parity; the #44 fix is a vendored dependency patch. Report: `results/ds-rocmfpx-tom-map.md`.
+
+### E94 - Strix (gfx1151) prefill push: measured f16 ceiling, per-phase excess and three levers (CLOSED-no-gain: the assumed 59 TFLOPS is 2.4x too high; no lever clears +3%)
+
+**Question.** What is the real Strix prefill ceiling, where is the per-phase excess, and can a sub-batch change, a hipBLASLt retune or a MoE kernel change clear the +3% gate?
+
+**Setup.** nimo, worktree `maya-prefill-push` (branch `exp/prefill-push-gfx1151` `d119b72` = everyday verify-fuse exe `6136fe7d`), TheRock ROCm 10.2, `RAM_GB=8`, wmma2, greedy, copied pristine usage profile; every arm a fresh server + receipt + preflight, 2 runs, `cache_n=0`.
+
+**Result.** (1a) Prefill `sclk` median **2458 MHz** at 8K / **2469** at 32K (min 1685, max 2754; package power median **85 W**, max 116 W). Measured hipBLASLt f16 GEMM peak **24.17** (8192³) / **24.24** (12288³) / 20.05 TFLOPS (16384³) at ~2868 MHz, so the assumed 59 TFLOPS is 2.4x too high; the prefill-clock ceiling is ~20.9 TFLOPS. (1b) Fresh profile `cache_n=0`: 8K 8321 tok / 23.71 s / 350.9 t/s; 32K 33177 tok / 96.84 s / 342.6 t/s; 1181 TFLOP at 32K = 12.2 TFLOPS = **50% of the measured peak** (59% of clock-scaled). 32K excess (ms): `moe_fused` 17629 (32.2%, 18.1 TF [E-i8]), `dsa_attn` 10144 (15.2%, 6.5), `hc` 7123 (7.5%), `dsa_proj+dsa_qabs+dsa` 5985 (10.8%, 7.4), `kda_proj+out` 4491 (20.1%, 16.0 = 77% of clock peak), `kda_rec` 4502 (4.9%), `dsa_index` 1703, `route` 1548, `shexp` 1106, `dense_ffn` 292. (1c) hipBLASLt 72 rows load, 1015 (8K)/3049 (32K) launches, fallbacks 0, 26 keys; T=4096 dispatches for N=2048/K=16384, N=2730/K=12288 and N=1366/K=12288 use the stale 2048-bucket solution 2541, **1.44/1.57/1.23x** slower than 2542. (2) Levers, 2 runs each: base 8K 351.1, 32K 340.8, decode 22.36; `PREFILL_SUB=8192` + `PREFILL_MB=24576` 8K 354.4 (+0.95%), 32K 346.6 (**+1.72%**), decode 22.28; retuned table (84 rows, +12 T=4096 rows all 2542) 8K 353.4 (+0.67%), 32K 343.5 (+0.79%), decode 22.46. Neither clears +3%. MoE int8 kernel microbench best 1.056-1.065x < 1.15x gate. Parity PASS (`glm_layer_parity`, `glm_model_test` 2.56e-6/0/3.10e-6, `hip_prefill_fused_parity` 24 pairs, `hip_prefill_mmq_parity`).
+
+**Decision.** CLOSED-no-gain for both tested levers. The dominant finding is the ceiling: the engine is at ~50% of the measured peak, not 21%, and the dense GEMM classes are already at 77% of the clock-scaled ceiling. `PREFILL_SUB=8192` + `PREFILL_MB=24576` is a consistent partial (+1.72% at 32K, +0.95% at 8K, decode flat) and the recommended candidate for a future lower-bar or combined build. The largest-excess lever (routed int8 MoE) gate-failed on the microbench. Everyday config unchanged; committed `830f909`; server restored, `/health` ok; no push.
+
+**Caveats.** Strix only; 2 runs per arm, `cache_n=0`; the MoE excess column assumes int8 = 2x f16. Report: `results/ds-nimo-prefill-push.md`, evidence `results/ds-nimo-prefill-push/`, nimo `~/prefill-push-2026/`.
+
+### E95 - single R9700: PR #103 trunk keep (MEASURED: +6..+16% decode, but KL 0.025-0.062 exceeds the 0.02 gate; no everyday MAP)
+
+**Question.** Does PR #103 trunk keep (`STRATA_GLM_TRUNK_KEEP`) give a usable single-R9700 decode gain at acceptable quality on Maya-S and Maya-M?
+
+**Setup.** `/ai/github/maya-v1033` at `528d2b4` (v1.0.33-2, the #103 merge; `origin/main` has since advanced to v1.0.34/#108/#110, so the merge was pinned), `build-multi` Release gfx1100+gfx1201, ROCm 7.2.1, tests on; HIP device 1. Config = copy of `maya-r9700-long-7900.json` (`RESERVE_MB 512`, `RAM_GB 90`, `PROMOTE_MIN 6`, INT8 KV, 131072) with exe/cwd -> `maya-v1033`; 82 slots/layer, RAM tier 63.09 GB. Every arm a fresh server + frozen copied usage + receipt + preflight, 3x256 warm-ups, 4 types x2 x256 greedy, then one 32.2K prompt + 256 greedy. KL: CPU lane off (`STRATA_GLM_CPU_LANE=0`), 1024-token held-out prose/code texts, first 32 unscored, vs the unset full model; unset self-repeat KL 0.000000. Maya-M repeated via a copy of `maya-r9700-m-7900.json`.
+
+**Result.** Maya-S steady decode unset 26.43 (mean 25.34): upstream MAP mean **27.76** (+9.55%) / steady 28.77 (+8.85%), KL 0.03832/0.03772 (mean 0.03802), top-1 91.3/92.6%; milder MAP 27.21 (+7.38%) / 28.25, KL 0.02485/0.02521 (mean 0.02503); stronger MAP **28.45** (+12.27%) / 29.38, KL **0.06413/0.05887** (mean 0.06150), top-1 87.5/89.3%; uniform `KEEP=7` 26.91 (+6.20%), mean KL 0.05803. Decode after 32.2K: unset 21.8, upstream 24.9, milder 23.3, stronger 25.4, `KEEP=7` 23.5; prompt 791-794 flat. v1.0.33 unset 26.43 vs v1.0.32 26.66 (-0.9%, in noise). Eval, same 178 items as `ds-r9700-m-vs-s`: unset 86.5%, upstream **88.2%** (+1.7 pp), stronger **88.8%** (+2.2 pp) — did not drop. Maya-M: unset 21.68 mean / 22.73 steady, upstream +14.11%/+12.27%, stronger +16.37%/+14.47%.
+
+**Decision.** Do not set `STRATA_GLM_TRUNK_KEEP` on the everyday R9700 config: the speed gain is real (+6..+16%) but KL 0.025-0.062 exceeds the 0.02 gate; eval did not drop, so KL is the only blocker. Optional faster-than-exact mode only. Everyday `r9700-long` restored, `/health` ok.
+
+**Caveats.** One run per arm; `skipped/tok` is derived and the keep arms' hit% is inflated (the stat counts a skipped expert as a VRAM hit); single gfx1201 card. Report: `results/ds-r9700-trunk-keep.md`, evidence `results/ds-r9700-trunk-keep/`.
+
+### E96 - Strix (gfx1151) prefill: ROCmFPX #44 chunk-fastest `quantize_mmq_q8_1` on HIP (CLOSED-no-gain: kernel 1.35-1.46x and byte-identical, but the everyday fused path dispatches it zero times)
+
+**Question.** Does porting ROCmFPX #44's chunk-fastest work order to Maya's vendored `quantize_mmq_q8_1` speed up Strix prefill?
+
+**Setup.** nimo, worktree `maya-mmq-quant-order` (branch `exp/mmq-quant-order-gfx1151` `ae0c348`, base `d119b72`), TheRock ROCm 10.2, gfx1151, `RAM_GB=8`, wmma2, greedy; fresh server + copied pristine usage + receipt + preflight per cell, `cache_n=0` everywhere. Vendored `ggml-cuda/quantize.cu` (llama.cpp `3cf03257`) and ported the HIP remap (`flat = blockIdx.y*gridDim.x + blockIdx.x; row = flat/gridDim.y; col = flat%gridDim.y`).
+
+**Result.** Q8_1 output byte-identical: 11 shapes/types, 319,297,536 B, base and patched raw dumps both sha256 `eb534822ffb4...`; `hip_prefill_mmq_parity` / `hip_prefill_fused_parity` / `glm_layer_parity` / `glm_model_test` all PASS. In-kernel `quantize_mmq_q8_1` (rocprofv3, MMQ path `PREFILL_FUSED=0`): 266.5 -> 197.8 ms at ~4168 tokens (**1.35x**), 591.8 -> 404.0 ms at ~8300 (**1.46x**). e2e MMQ fallback (2 runs): 8K 329.05 -> 328.30 (-0.23%), 32K 328.40 -> 330.25 (+0.56%), 64K 322.20 -> 324.90 (+0.84%). Everyday fused path (`rdna4::native_*`, quantizer `moe_fused_rdna4.cu:680 quant_act_nat_kernel`) dispatches `quantize_mmq_q8_1` **zero** times over a 4168-token prefill, so its e2e is flat: 8K 349.30 -> 349.55 (+0.07%), 32K 341.75 -> 341.15 (-0.18%), 64K 333.95 -> 334.45 (+0.15%). The kernel is only ~2% of the non-fused MMQ prompt, so the 1.35-1.46x kernel win is <1% e2e.
+
+**Decision.** CLOSED-no-gain for the everyday path. Keep branch `exp/mmq-quant-order-gfx1151` (`ae0c348`) as the correct MMQ-path port; do not switch the everyday config; upstreaming is optional because it only affects the non-fused MMQ path. Everyday server restored (`maya-nimo-next.json`, exe `6136fe7d`, temp 0.0), `/health` ok. The second arm (few-row N=24 HC mix GEMM) was not attempted; `hc` is 7.5% of prefill (E94).
+
+**Caveats.** Strix only; 2 runs per cell. A first dump showed an `ids!=null` mismatch caused by the harness's null-stream `hipMemcpy` racing a non-blocking stream; a device sync made base and patched identical and deterministic — not a kernel difference. Report: `results/ds-nimo-mmq-quant-order.md`, evidence `results/ds-nimo-mmq-quant-order/`, nimo `~/mmq-order-2026/`.
+
+### E97 - Strix (gfx1151) prompt MoE expert-quant microbench: is IQ2_XXS dequant the prefill limiter? (CLOSED-no-gain: hypothesis 1h rejected; the bigger-but-simpler ROCmFPX-like pair is 1.07-1.13x slower)
+
+**Question.** Is the everyday fused gfx1151 prompt MoE IQ2_XXS-dequant-bound, and would a bigger-but-simpler ROCmFPX-like quant pair (IQ3_S gate/up, IQ4_XS down) be faster?
+
+**Setup.** nimo, worktree `maya-quant-prefill` (branch `exp/quant-prefill-gfx1151` `38cb924`, base `d119b72` = everyday exe `6136fe7d`), TheRock ROCm 10.2, gfx1151; synthetic GGML blocks at the real GLM geometry (E=4096, FF=2048), 16384 routed rows, tokens/expert 32/128/512/2048, 2 runs (ratios repeat to <0.6%). The fused #98 kernel gains a measurement-only skip-decode template and down IQ3_S/IQ4_XS dispatch; `hip_prefill_fused_parity` PASS on all 30 GU/down pairs. No server arm, no request; everyday server untouched.
+
+**Result.** Fused combined ms, iq2_xxs/iq3_xxs vs iq3_s/iq4_xs: 52.38/59.16 (T=32), 35.26/38.62 (128), 34.30/36.83 (512), 33.93/36.19 (2048) -> ratio **1.129/1.095/1.074/1.067**, the bigger pair 7-13% slower. Per kernel (T=128, full/skip-decode ms): gate/up iq2_xxs 23.31/20.19 (decode 3.13), iq3_xxs 25.24/20.88 (4.36), iq3_s 26.87/21.26 (5.61), iq4_xs 26.42/21.48 (4.95); down iq3_xxs 11.05/10.21, iq3_s 11.52/10.47, iq2_s 11.85/10.70. Decode is 11-15% of the fused MoE phase; ~85% is the WMMA+load pipeline. MMQ gate/up+down at T=128: iq4_xs **30.71** vs iq2_xxs 33.96 / iq3_xxs 34.71 / iq3_s 34.56 / q4_K 34.52 (IQ4_XS 0.896x = ~+3.5% overall); at T=32 q4_K 43.01 vs 61.71-70.42. `sclk` median 2482 MHz (p90 2549, max 2654), 85 W, 69 C.
+
+**Decision.** Hypothesis 1h REJECTED on the everyday fused path: expected prefill with IQ3_S/IQ4_XS experts is ~2-3% slower, because their decode is not cheaper and they read more bytes. A decode-once-per-expert reuse scheme is bounded by ~+4.0% overall and cannot close the 1.36x Gorgon yardstick (zeroing all MoE is <=1.475x; 1.36x from MoE alone needs 5.62x), leaving hypothesis 1g (clock/power/hardware, engine-wide effects). On the MMQ fallback the order flips (IQ4_XS ~+3.5% overall; Q4_K ~parity at T>=128, much faster at T=32), but MMQ only runs where the stock fused kernel is ineligible. Measurement only, no everyday change; everyday server untouched, `/health` ok.
+
+**Caveats.** Synthetic random weight blocks, not the real pack; uniform tokens/expert; the skip-decode variant perturbs register pressure/scheduling for iq2_s gate/up and iq4_xs down, so those deltas are not clean; MMQ and fused comparisons are within-path only; single GPU. Report: `results/ds-nimo-quant-prefill.md`, evidence `work/ds-nimo-quant-prefill/`, nimo `maya-quant-prefill` `exp/quant-prefill-gfx1151` `38cb924`.
+
+### E98 - quality bar for approximate speed levers (DESIGN: replace "KL <= 0.02 + <=1.5 pp on 178 items" with a divergence screen + behaviour canaries + speed gate)
+
+**Question.** What is a defensible quality gate for approximate speed levers, replacing the borrowed `KL <= 0.02` plus `<=1.5 pp on 178 items` rule?
+
+**Setup.** Research + design only, no GPU, server or model run; public literature/community anchors plus existing local eval JSONL and paired statistics.
+
+**Result.** External anchors: Dutta 2024 (an accuracy delta <=2% hides flips up to 13.6%; KLD-vs-flips Spearman 0.981); llama.cpp LLaMA-3-8B WikiText-2 `q4_K_M` KLD 0.0313 / 91.9% same-top, `q5_K_M` 0.0108, `q3_K_M` 0.1019 / 71.1%, `q2_K` 0.4451; Unsloth `Q4_K_XL` 0.0237 / `Q3_K_XL` 0.0806; vLLM W4A16-GS32 0.0487 / GS128 0.073 / NVFP4 0.09-0.11; Nikolic 2026 (full-cohort rho(KLD, composite) -0.72/-0.86 but collapses to ~0 near baseline; silent-zone tau 0.064/0.027); Intel's default relative `tolerable_loss` 0.01; AMD/NVIDIA publish no numeric KL bar. MoE: Mixtral dropping 2/8 experts -3.4 pts, 4/8 -8.0 pts. Local paired stats: 8-16/178 discordant (4.5-9.0%); MDE@178 at 80% power 4.4-6.3 pp; N* 881-1764 for 2 pp and 3530-7062 for 1 pp; power@178 6.5-9.1% (1 pp) / 14.2-24.0% (2 pp); pairing ~2.15x vs unpaired; MMLU subject clustering can inflate N* ~31x. Proposal: **Class 0** exact -> parity + greedy token-id identity + KL exactly 0; **Class 1** approximate -> **Gate A** divergence screen (mean KL <= 0.05 adopt / > 0.10 hard fail, top-1 >= 90% / < 85%, p99 <= 25x mean; 8-16 x 1024-token held-out texts) + **Gate B** behaviour canaries (tool-call structural exactness n>=48, coding pass@1 + first-divergent-token, IFEval strict, NIAH 32/64/128K; the 178-item suite demoted to a 3 pp non-inferiority breakage guard) + **Gate C** speed. Under Gate A the PR #103 upstream MAP (KL 0.038, top-1 91.3-92.6%) passes and the stronger MAP (0.061, 87.5-89.3%) fails; Gate A is a screen only.
+
+**Decision.** Adopt the two-gate bar as the proposal for approximate levers. The user approved a v2 merge on 2026-10-11 that supersedes the Gate A "adopt" thresholds: KL/top-1 become a diagnostic plus a gross-damage tripwire (reject above mean KL 0.10 or below top-1 85%; always report direction, reference, corpus, truncation), and acceptance moves to a paired task suite — 64 development cases plus 160 locked confirmation cases (40 tools, 40 coding+instruction, 40 long-context, 40 multi-turn), with reference-right->candidate-wrong and wrong->right counted separately, exact McNemar and prompt-level bootstrap CIs. Pass = repeatable speed gain AND zero reproducible critical right->wrong AND one-sided 95% CI of overall paired quality >= -2 pp AND no domain worse than -3 pp; inconclusive -> more cases, not pass. The 178-item weighted score is demoted from a loss gate to a gross-breakage guard. No GPU, server, model run, post or push.
+
+**Caveats.** Research+design only; thresholds are anchored to external quants and local evidence, not independently revalidated on Maya; KL is not comparable across models, corpora, tokenizers or implementations; p99 per-token KL is not yet emitted by `generate.cpp`; McNemar N* assumes IID items, and MMLU subject clustering can inflate it. Report: `results/ds-quality-bar.md`; GAP-REGISTER.md "QUALITY BAR ADOPTED" and "QUALITY BAR v2".
+
+### E99 - dual GPU (R9700 + RX 7900 XT) Maya-S retune on v1.0.33 (MEASURED: decode 35.80 -> 40.30 tok/s (+12.6%), 32K prompt 1049.6 -> 1128.9 (+7.6%))
+
+**Question.** Can the dual-card v1.0.32 config be retuned on v1.0.33, and which knobs actually help?
+
+**Setup.** R9700 + RX 7900 XT, Maya-S, v1.0.33 `build-multi` (`maya-v1033` `528d2b4`), `gpu [1,0]`, auto layer split K=24 ([0,24) R9700 / [24,45) 7900 XT), MTP block on the 7900 XT, greedy. Frozen copied usage + receipt + preflight per arm, 3x256 warm-ups, 4 types x2 x256 greedy, then ~8K and ~32K prompts (`cache_n=0`). 17 arms, one change at a time.
+
+**Result.** Current v1.0.32 config decode **35.80**, 8K 696.5, 32K 1049.6, decode-after-32K 34.2, accept 77.8%, 172/82 slots; v1.0.33 base is a wash (35.91 / 695.1 / 1048.3). Winners kept cumulatively: `RESERVE_MB 3072->1024` (**+8.1%** decode, prompt flat, 186/96 slots); `PREFILL_ATTN=wmma2` (+2.9% 8K / +5.7% 32K; only the 7900 XT changes, gfx1201 already defaults to it); `PREFILL_SUB 2048` / `PREFILL_MB 8192` (32K +2.5%); `KV_INT8=1` (+3.7% decode on top, -0.7% prompt, 189/98 slots). Best exact config decode **40.30** (repeat 40.21), 8K **721.4**, 32K **1128.9**, decode-after-32K **38.2**, accept **80.2%**: +12.6% decode / +3.6% 8K / +7.6% 32K vs the current config. Versus one R9700 everyday (26.66 / 804 / 789): +51% decode, +43% at 32K, but -10% at 8K (a single 8K chunk cannot overlap the two cards). Rejected: `RESERVE_MB 512` (-4.3%, unstable, 190/99 slots); split K=22 (-7.2%); split K=26 (+3.6% decode alone but 32K -3.1..-3.7% on top, fails the no-harm gate); `MV_RDNA=1` (+1.4% < 2% gate); 262144 ctx (-4.5% decode); trunk keep not shipped (`ds-r9700-trunk-keep` recommends against it, KL > 0.02).
+
+**Decision.** Ship `project-maya/maya-2gpu-best-7900.json` = v1.0.33 `build-multi` (`528d2b4`) + `RESERVE_MB 1024` + `PREFILL_ATTN=wmma2` + `PREFILL_SUB 2048`/`PREFILL_MB 8192` + `KV_INT8=1`, 131072 ctx, auto split, temp 0.0; server left running (`start7900.sh 2gpu-best`, `/health` ok). `project-maya` untouched.
+
+**Caveats.** The serve fast path pipelines one token per round, so MTP tokens/round is ~1.008 by construction (accept = a draft hit avoiding a head redo), not the batch-verify 1.75; MTP off vs on was not measured; single-arm deltas below ~2% are within the CPU-lane calibration noise. Report: `results/ds-dual-v1033.md`, evidence `results/ds-dual-v1033/`.

@@ -45,30 +45,35 @@ prompt lengths, ROCm versions and run counts differ, so the notes label single r
 
 | Setup | Prefill | Decode | Notes |
 |---|---|---|---|
-| AI PRO R9700 (32 GB) | ~799 tok/s at 8K, ~796 at 32K | ~24.8 tok/s (256-token replies) | Maya v1.0.32, 128K context, INT8 latents, RAM tier 90 GB, reserve 1024 MB. ~743 tok/s at 119K on v1.0.23; not re-measured on v1.0.32. Single runs of small prompt samples. |
-| Strix Halo (128 GB unified) | ~348 / ~337 / ~327 / ~314 tok/s at 8K/32K/64K/120K | ~17 short-prompt; ~15.5 after 121K | Maya v1.0.24+ (prompt-tail skip + fused gfx11 MoE fix), TheRock ROCm 10.2, FP16 latents, 262144 context. The larger 262K window costs at most ~1.6% at matched lengths, so it is "at no cost" in practice. One request per cell. |
-| Strix Halo, single-GPU speculation prototype | not measured | +5–21% decode by prompt type, token-identical | Our prototype. **Unmerged** and not the everyday configuration; overlaps upstream [#76](https://github.com/mw00/project-maya/pull/76)/[#96](https://github.com/mw00/project-maya/pull/96). |
-| R9700 + RX 7900 XT | ~690 tok/s at 4K, ~756 at 8K | ~38 tok/s | Maya v1.0.23 integration build (not re-measured on v1.0.32), [#14](https://github.com/mw00/project-maya/pull/14) layer split, MTP drafts on the second card, ~76% accepted. |
+| AI PRO R9700 (32 GB) | ~800 tok/s at 8K/32K | ~26.6 tok/s (256-token replies) | Maya v1.0.32, 128K context, INT8 latents, RAM tier 90 GB, `RESERVE_MB 512`. Single runs of small prompt samples. |
+| Strix Halo (128 GB unified) | ~347 / ~340 / ~334 tok/s at 8K/32K/64K | ~23.7 tok/s (4-type mean) | Maya v1.0.32 + fused prompt MoE ([#98](https://github.com/mw00/project-maya/pull/98)) + #96 MTP + our verify-fuse branch, `RAM_GB=8`, wmma2, TheRock ROCm 10.2, 262144 context. |
+| Strix Halo, MTP speculation (#96 + verify-fuse) | ~340 tok/s at 32K | verify round 78.1 -> 73.9 ms; +17.7% over no-spec | Our verify-fuse branch (batched MLA `k_b/v_b` + fused union routed MoE), bit-identical. #96 carries the MTP path; [#113](https://github.com/mw00/project-maya/pull/113) carries the gfx1151 wmma2 default. |
+| R9700 + RX 7900 XT | ~721 at 8K, ~1129 at 32K | ~40.3 tok/s | Maya v1.0.33 `build-multi` + `RESERVE_MB 1024` + wmma2 + `PREFILL_SUB 2048` + KV INT8, 128K, auto split K=24, MTP drafts on the second card, 80.2% accepted; decode after 32K 38.2. Its 8K prompt is -10% vs one R9700 (a single 8K chunk cannot overlap the cards). |
 | RX 7900 XT (20 GB) | ~570 tok/s at 4K | ~18.3 tok/s | v1.0.23 integration build, 90 GB RAM. Our upstream [#95](https://github.com/mw00/project-maya/pull/95) comment measures RDNA GEMV here at +1.1% decode, bit-exact. RAM shadows [#15](https://github.com/mw00/project-maya/pull/15) are on hold. |
 
 The test box with the discrete cards has 192 GB of RAM, so experts that don't fit in VRAM come from pinned RAM rather
 than the SSD. With less RAM, decode is slower.
 
-> **Correction (2026-10-09).** The single-R9700 decode figure was 28.1 tok/s, and the apparent drop to about 22 on
-> later builds was taken as a regression. Neither holds. The 28.1 run's replies averaged about 26 tokens; short replies
-> stay on VRAM-resident experts and decode faster. With 256-token replies, v1.0.16 and v1.0.23 both give 21.2–21.5
-> tok/s at 48 GB RAM. No decode regression was found. The current ~24.8 tok/s uses the 90 GB RAM tier and reserve
-> settings below.
+> **Correction (2026-10-09, updated 2026-10-11).** The single-R9700 decode figure was 28.1 tok/s, and the apparent
+> drop to about 22 on later builds was taken as a regression. Neither holds. The 28.1 run's replies averaged about 26
+> tokens; short replies stay on VRAM-resident experts and decode faster. With 256-token replies the old build gave
+> ~25 tok/s (21.2–21.5 at 48 GB RAM); the current everyday config is ~26.6 tok/s with the 90 GB RAM tier and
+> `RESERVE_MB 512`. No decode regression was found.
 
 ### Recommended settings
 
 - **One R9700, everyday:** 128K context (`--max-context 131072`) with INT8 latents (`STRATA_GLM_KV_INT8=1`),
-  `STRATA_GLM_RAM_GB=90`, `STRATA_GLM_RESERVE_MB=1024`, `STRATA_GLM_PROMOTE_MIN=6`. That holds ~24.8 tok/s decode and
-  ~799/~796 tok/s prompt speed at 8K/32K. A larger prompt chunk of 32768 measured +4.1% at 32K (single run). The 1M
+  `STRATA_GLM_RAM_GB=90`, `STRATA_GLM_RESERVE_MB=512`, `STRATA_GLM_PROMOTE_MIN=6`. That holds ~26.6 tok/s decode and
+  ~800 tok/s prompt speed at 8K/32K. A larger prompt chunk of 32768 measured +4.1% at 32K (single run). The 1M
   model maximum runs but costs ~12% decode and 31–37% prompt speed.
-- **Strix Halo, everyday:** `--max-context 262144 --prefill 32768`, FP16 latents, `amd_iommu=off`. The pool retains
-  12,096 expert slots (80.17 GB); reserving 262K instead of 64K changes matched-length prompt speed by at most 1.6%.
+- **Strix Halo, everyday:** `--max-context 262144`, `STRATA_GLM_RAM_GB=8`, `STRATA_GLM_PREFILL_ATTN=wmma2`,
+  `amd_iommu=off`, FP16 latents; the everyday exe is our verify-fuse branch (v1.0.32 + fused prompt MoE #98 +
+  #96 MTP + batched MLA `k_b/v_b` + fused union routed MoE). Decode ~23.7 tok/s (4-type mean) and prompt
+  ~347/340/334 tok/s at 8K/32K/64K. The pool retains 12,096 expert slots (80.17 GB); reserving 262K instead of 64K
+  changes matched-length prompt speed by at most 1.6%.
 - **Two cards:** `--gpus 0,1`; setup puts the larger card first. GPU numbers follow the KFD order that `--check` prints.
+  The best measured dual config is `maya-2gpu-best-7900.json` (v1.0.33 + `RESERVE_MB 1024` + wmma2 +
+  `PREFILL_SUB 2048` + KV INT8, 128K): ~40.3 tok/s decode, ~1129 tok/s at 32K.
 
 > **Strix context (2026-10-09).** Muse reports 12/12 single-needle and 4/4 multi-hop hits through ~240K; raw logs
 > confirm those request lengths, but the reply texts were not retained for independent rescoring. This is a small
@@ -87,6 +92,9 @@ A public summary of the efficiency audits. Estimates are labelled; everything el
 
 - **Prefill is compute-bound on both chips.** On Strix, removing all SSD re-reads gave no prefill gain (single run),
   and the phase profile shows the time in compute, not copies. Prompt-side optimizations should target math, not I/O.
+- **The Strix prefill ceiling was 2.4x lower than the spec sheet.** The assumed 59 TFLOPS was the 2x-FP32/WMMA spec;
+  the WMMA f16 figure is ~30 TFLOPS and hipBLASLt measures 24.2 TFLOPS (20.9 at the ~2.47 GHz, 85 W "balanced"
+  prefill clock). Against that measured ceiling the engine is at ~50%, not 21%.
 - **Where R9700 prefill time goes (measured shares, one profile):** attention ~21%, KDA projections ~19%, MoE ~27%,
   the rest in the remaining dense projections and glue. This is why MoE and attention kernels are the prefill levers.
 - **GEMM tuning is a small lever.** The hipBLASLt GEMMs already run at ~66% of the R9700's FP16 peak (154 TFLOPS at
@@ -157,12 +165,14 @@ and [NOTES.md](NOTES.md#hip--rocm-lessons) for the earlier Strix evaluation path
 | [#39](https://github.com/mw00/project-maya/pull/39) | Fix tier/lending races + invalid-route indexing (crash fix) | merged |
 | [#52](https://github.com/mw00/project-maya/pull/52) | HIP mappings for the device queries #44 uses (build fix) | merged |
 | [#61](https://github.com/mw00/project-maya/pull/61) | Skip the last layer's unused prompt outputs on one device (+1-1.4%, byte-identical) | merged |
-| [#98](https://github.com/mw00/project-maya/pull/98) | Fused prompt MoE on Strix Halo gfx1151 (+13.5/+8.1/+5.0% at 4/8/16K) | open |
+| [#98](https://github.com/mw00/project-maya/pull/98) | Fused prompt MoE on Strix Halo gfx1151 (+13.5/+8.1/+5.0% at 4/8/16K) | open; waiting on the maintainer's Windows build |
+| [#113](https://github.com/mw00/project-maya/pull/113) | gfx1151 default to wave32 WMMA (wmma2) prompt attention (+3.7/+3.8/+4.3% at 8/32/64K) | open |
 
 We also posted measurements on upstream PRs:
 [#95](https://github.com/mw00/project-maya/pull/95) (RDNA GEMV on RX 7900 XT: +1.1% decode, bit-exact) and
-[#96](https://github.com/mw00/project-maya/pull/96) (single-GPU MTP on R9700: the gate keeps it off at ~28% experts in
-VRAM; forced, it gives reasoning +12.6%, chat +5.5%, code +3.3%, prose −4.6%).
+[#96](https://github.com/mw00/project-maya/pull/96) (single-GPU MTP: on R9700 the gate keeps it off at ~28% experts in
+VRAM; forced, it gives reasoning +12.6%, chat +5.5%, code +3.3%, prose −4.6%; on Strix it is part of the everyday
+build, with our verify-fuse branch on top).
 
 Also see the [roadmap](ROADMAP.md), the [engineering notes](NOTES.md) and the [experiment log](EXPERIMENTS.md).
 

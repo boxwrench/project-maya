@@ -5,35 +5,46 @@ RX 7900 XT come second.
 
 ## Now
 
-- **Decode bandwidth and critical-path measurement.** On R9700 and Strix Halo, decode is close to a memory-bandwidth
-  limit, so the useful question is which bytes are on the critical path and which reads overlap. We are measuring the
-  expert/tier reads and the per-token critical path before changing kernels. Related: the upstream
-  [#95](https://github.com/mw00/project-maya/pull/95) GEMV result (RDNA GEMV on the RX 7900 XT was +1.1% decode,
-  bit-exact) shows how small the kernel-level headroom is once bandwidth is the wall.
-- **Upstream [#96](https://github.com/mw00/project-maya/pull/96) single-GPU MTP vs our two-row verify on Strix Halo.**
-  Upstream's gate keeps MTP off at ~28% experts in VRAM; forced, it gives reasoning +12.6%, chat +5.5%, code +3.3%,
-  prose −4.6%. Our unmerged two-row prototype is token-identical and +5–21% decode by prompt type on Strix. Next is
-  the same comparison done properly: count grouped expert reads across the verify window and bytes per accepted token,
-  not just wall-clock.
+- **Strix prefill is the priority.** The measured f16 ceiling is 24.2 TFLOPS (20.9 at the prefill clock), so the
+  engine is at ~50% of peak, not 21%: the ranked excess is routed MoE (32%), MLA/DSA attention, hyper-connections
+  and KDA projections. The next experiments are in Next. See [E94](EXPERIMENTS.md#e94---strix-gfx1151-prefill-push-measured-f16-ceiling-per-phase-excess-and-three-levers-closed-no-gain-the-assumed-59-tflops-is-24x-too-high-no-lever-clears-3).
+- **Upstream [#96](https://github.com/mw00/project-maya/pull/96) single-GPU MTP is adopted on Strix, with our
+  verify-fuse work on top.** Adaptive MTP is +17.7% over no-spec ([E89](EXPERIMENTS.md#e89---strix-gfx1151-pr-96-single-gpu-mtp-speculation-config-knob-sweep-closed-no-gain-keep-the-everyday-default-draft3--adapt-mtp-is-177-over-no_spec-1919---2257-toks-and-adaptive-beats-fixed-23-by-6-9-points-but-no-arm-clears-the-pre-registered-bar));
+  batching the absorbed MLA `k_b/v_b` and fusing the routed MoE union read cuts the T=2 verify round 78.1 -> 73.9 ms,
+  bit-identical, and is now the everyday Strix build ([E91](EXPERIMENTS.md#e91---strix-gfx1151-pr-96-verify-round-batched-mla-k_bv_b-a--fused-union-routed-moe-b-kept-ab-cuts-the-t2-verify-round-7809---7394-ms-c2t-143---135-bit-identical-with-no-no_spec-regression),
+  [E92](EXPERIMENTS.md#e92---nimo-everyday-verify-fuse-build-adopted-adopted-maya-nimo-nextjson-now-runs-the-verify-fuse-exe-6136fe7d-default-decode-43-33k-54)).
+  On R9700 the upstream gate still keeps MTP off at ~28% experts in VRAM.
+- **Open upstream: [#98](https://github.com/mw00/project-maya/pull/98) and
+  [#113](https://github.com/mw00/project-maya/pull/113).** Fused prompt MoE on gfx1151 (#98:
+  +13.5/+8.1/+5.0% at 4/8/16K) is waiting on the maintainer's Windows build, and the gfx1151 wmma2 default (#113) is
+  open. The current everyday configs are R9700 `RESERVE_MB 512`, the nimo verify-fuse build, and
+  `maya-2gpu-best-7900.json` on the dual pair.
 - **Recently landed (v1.0.32).** [#38](https://github.com/mw00/project-maya/pull/38) (RDNA4 `wmma2` prompt attention),
   [#39](https://github.com/mw00/project-maya/pull/39) (tier/lending race crash fix),
   [#52](https://github.com/mw00/project-maya/pull/52) (HIP device-query mappings) and
   [#61](https://github.com/mw00/project-maya/pull/61) (skip the last layer's unused prompt outputs, +1–1.4%,
-  byte-identical) are all merged. Fused prompt MoE on Strix Halo gfx1151 is open as
-  [#98](https://github.com/mw00/project-maya/pull/98): +13.5%/+8.1%/+5.0% prefill at 4/8/16K.
-  RAM shadows ([#15](https://github.com/mw00/project-maya/pull/15)) stay on hold.
+  byte-identical) are all merged. RAM shadows ([#15](https://github.com/mw00/project-maya/pull/15)) stay on hold.
 
 ## Next
 
-- **Expert kernels and DSA attention for prefill.** The R9700 prefill profile puts attention ~21%, KDA projections
-  ~19% and MoE ~27% of prompt time, so these are the remaining prefill levers. DSA attention is the sparse-attention
-  path for longer prompts.
+- **Power-mode A/B on Strix.** The stock "balanced" mode runs 2.47 GHz at 85 W; the measured prefill ceiling scales
+  with the clock, so test the power/clock modes before more kernel work (E94).
+- **Small-wins bundle.** The sub-gate levers are individually below the e2e gate but stack: `PREFILL_SUB=8192` +
+  `PREFILL_MB=24576` (+1.7% at 32K), the retuned hipBLASLt table (+0.8% at 32K) and the MMQ chunk-fastest quant
+  order (+0.6–0.8% on the fallback path). Combine them and re-measure the bundle (E94, E96, E99).
+- **Fused-tile sweep and DFlash2 on Strix.** Retune the fused prompt MoE tiles (E94, E97) and take the next
+  draft/verify change after the verify-fuse work (E91, E92).
+- **DSA rows.** Work the DSA indexer and projections, the remaining context-dependent prefill growth
+  (`glm_dsa_select` is O(n_vis²)); the ROCmFPX map found no transferable GLM DSA patch (E93, E94).
+- **Maya-M and trunk keep under the new quality gate.** Re-run the PR #103 trunk-keep decision (E95: +6–16% decode
+  on R9700 but KL 0.025–0.062) and Maya-M vs Maya-S against the paired quality suite below, not the old
+  "KL <= 0.02" (E98).
+- **Paired 224-case quality suite.** 64 development + 160 locked confirmation cases (40 tools, 40 coding+instruction,
+  40 long-context, 40 multi-turn) with exact McNemar and bootstrap CIs (E98; GAP-REGISTER "QUALITY BAR v2"). Until it
+  exists, the 178-item eval + 48-case tools set are breakage detectors only.
 - **Cost-aware expert placement: compute in place vs copy.** Issue [#6](https://github.com/mw00/project-maya/issues/6)
   found that, for RAM-tier experts, computing on the CPU beat copying the weights over PCIe. We want the placement
   planner to choose per expert and per token between compute-in-place and copy, using the measured cost of each.
-- **Maya-M (larger quant) on R9700 and Strix Halo.** Our measured results are all Maya-S v2. Maya-M has ~2–3-bit
-  routed experts and may help exact-digit recall (an open question), at the cost of fewer resident experts. It needs
-  its own RAM-tier sizing, not a reused 90 GB allocation.
 
 ## Later, bigger bets (only if the numbers justify them)
 
@@ -68,9 +79,10 @@ RX 7900 XT come second.
 
 ## Ceilings to keep in mind
 
-- **Strix Halo decode:** measured 17.2–18 tok/s (falling to ~15.5 after ~120K). The quant reads ~9 GB of weights per
-  token and the chip reads ~240 GB/s, giving a rough ~28–30 tok/s bandwidth ceiling. Getting past the measured figure
-  needs a smaller quant, better overlap, or speculation.
+- **Strix Halo decode:** measured ~19 tok/s no-spec and ~23.7 tok/s with #96 MTP plus the verify-fuse branch. The
+  quant reads ~9 GB of weights per token and the chip reads ~240 GB/s, giving a rough ~28–30 tok/s bandwidth ceiling.
+  Getting past the measured figure needs a smaller quant, better overlap, or speculation.
 - **Any single card:** decode is set by how many experts fit in VRAM. More VRAM beats faster kernels.
 - **Prefill is compute-bound, not copy-bound.** Removing all SSD re-reads on Strix gave no prefill gain, so prompt
-  work should target the math (attention, KDA projections, MoE), not the I/O.
+  work should target the math (attention, KDA projections, MoE), not the I/O. The measured Strix f16 ceiling is
+  24.2 TFLOPS (20.9 at the prefill clock), so the engine is at ~50% of peak (E94).
