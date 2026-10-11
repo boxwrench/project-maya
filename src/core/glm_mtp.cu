@@ -360,6 +360,8 @@ bool Glm5Model::mtp_rows_setup(int rows, std::string& err) {
         f(B.iw, (size_t) R * g.idx_heads);
         f(B.q, (size_t) R * g.n_head * g.qk_nope);
         f(B.iq, (size_t) R * g.idx_heads * g.idx_key);
+        f(B.q_abs, (size_t) R * g.n_head * g.kv_lora);
+        f(B.ctx, (size_t) R * g.n_head * g.kv_lora);
         b(B.attn_q, (size_t) R * q8_bytes((int64_t) g.n_head * g.v_head));
         f(B.rlog, (size_t) R * g.n_expert);
         f(B.sh_g, (size_t) R * FF);
@@ -479,6 +481,11 @@ bool Glm5Model::fast_dsa_rows(int il, int64_t p0, int T, std::string& err) {
     j2[1] = {Ly.idx_q_b, nullptr, B.qr, B.iq, nullptr, 1.0f, gf::kTypeBF16, g.q_lora, g.idx_heads * g.idx_key};
     if (!gf::mv_rows(j2, 2, T, s)) { err = "glm mtp: dsa q"; return false; }
     if (F->prof_on) F->mark("v_dsa_q_mv");
+    // the absorbed weights once for the window; the selection and attention still run row after row
+    const int ld = g.n_head * g.kv_lora;
+    const bool mla_rows = getenv("STRATA_GLM_MLA1") == nullptr && dev_ < 16 && g.kv_lora % 32 == 0 && g.v_head % 32 == 0;
+    if (mla_rows)
+        gf::mla_kb_rows(Ly.k_b, B.q, g.n_head * g.qk_nope, g.n_head, g.qk_nope, g.kv_lora, T, B.q_abs, ld, s);
     for (int t = 0; t < T; ++t) {
         const int64_t p = p0 + t;
         const int pool_done = (int) ((p + 1) / g.idx_kpool);
@@ -488,10 +495,16 @@ bool Glm5Model::fast_dsa_rows(int il, int64_t p0, int T, std::string& err) {
         const int top_pools = std::min(g.top_pools_max(), pool_done);
         const int n_sel = g.idx_kpool * top_pools + (g.idx_select_tail ? g.idx_kpool - 1 : 0);
         gf::dsa_select(F->score, pool_done, g.idx_kpool, top_pools, n_sel, (int) p, F->cells, s);
-        gf::mla(B.q + (size_t) t * g.n_head * g.qk_nope, Ly.k_b, Ly.v_b, (const uint16_t*) (state_ + dsa_lat_[(size_t) il]),
-                F->cells, n_sel, g.n_head, g.qk_nope, g.kv_lora, g.v_head,
-                (uint8_t*) B.attn_q + (size_t) t * q8_bytes((int64_t) g.n_head * g.v_head), s, lat_q8_);
+        if (mla_rows)
+            gf::mla_attention(B.q_abs + (size_t) t * ld, (const uint16_t*) (state_ + dsa_lat_[(size_t) il]), F->cells,
+                              n_sel, g.n_head, g.qk_nope, g.kv_lora, B.ctx + (size_t) t * ld, s, lat_q8_);
+        else
+            gf::mla(B.q + (size_t) t * g.n_head * g.qk_nope, Ly.k_b, Ly.v_b, (const uint16_t*) (state_ + dsa_lat_[(size_t) il]),
+                    F->cells, n_sel, g.n_head, g.qk_nope, g.kv_lora, g.v_head,
+                    (uint8_t*) B.attn_q + (size_t) t * q8_bytes((int64_t) g.n_head * g.v_head), s, lat_q8_);
     }
+    if (mla_rows)
+        gf::mla_vb_rows(Ly.v_b, B.ctx, ld, g.n_head, g.kv_lora, g.v_head, T, B.attn_q, g.n_head * g.v_head / 32, s);
     if (F->prof_on) F->mark("v_mla");
     gf::MvJob o = {Ly.out.q, B.attn_q, nullptr, B.mixer, nullptr, 1.0f, Ly.out.type, g.n_head * g.v_head, g.n_embd};
     if (!gf::mv_rows(&o, 1, T, s)) { err = "glm mtp: dsa output"; return false; }

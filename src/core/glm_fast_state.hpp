@@ -322,7 +322,7 @@ struct Glm5Model::FastState {
         float *fa = nullptr, *ga = nullptr, *kq = nullptr, *g2 = nullptr;
         void* gated_q = nullptr;
         float *qr_raw = nullptr, *qr = nullptr, *kv_raw = nullptr, *ik_raw = nullptr, *ig_raw = nullptr, *iw = nullptr;
-        float *q = nullptr, *iq = nullptr;
+        float *q = nullptr, *iq = nullptr, *q_abs = nullptr, *ctx = nullptr;
         void *qr_q = nullptr, *attn_q = nullptr;
         float *rlog = nullptr, *sh_g = nullptr, *sh_u = nullptr, *dg = nullptr, *du = nullptr;
         void* dhq = nullptr;

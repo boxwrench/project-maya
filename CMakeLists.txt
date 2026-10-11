@@ -481,6 +481,13 @@ if(STRATA_ENABLE_CUDA OR STRATA_ENABLE_HIP)
   target_link_libraries(glm_dsa_parity PRIVATE strata_kernels ${_strata_gpu_runtime_target})
   add_test(NAME glm_dsa_parity COMMAND glm_dsa_parity --selftest)
 
+  add_executable(glm_mla_rows_test src/kernels/glm_mla_rows_test.cpp)
+  target_include_directories(glm_mla_rows_test PRIVATE ${_strata_gpu_include_directories})
+  target_link_libraries(glm_mla_rows_test PRIVATE strata_kernels ${_strata_gpu_runtime_target})
+  add_test(NAME glm_mla_rows_test COMMAND glm_mla_rows_test)
+  add_test(NAME glm_mla_rows_attn1_test COMMAND glm_mla_rows_test)
+  set_tests_properties(glm_mla_rows_attn1_test PROPERTIES ENVIRONMENT "STRATA_GLM_MLA_ATTN1=1")
+
   add_executable(glm_layer_parity src/kernels/glm_layer_parity.cpp)
   target_include_directories(glm_layer_parity PRIVATE ${_strata_gpu_include_directories})
   target_link_libraries(glm_layer_parity PRIVATE strata_kernels ${_strata_gpu_runtime_target})

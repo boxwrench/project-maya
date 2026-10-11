@@ -161,6 +161,15 @@ void dsa_select(const float* score, int n_vis, int kpool, int top_pools, int n_s
 /// lat_q8: the cache holds INT8 latent records (see lat8_rec_bytes), else FP16 rows of kv_lora.
 void mla(const float* q, const uint16_t* wk_b, const uint16_t* wv_b, const uint16_t* lat, const int* cells, int n_sel,
          int n_head, int qk_nope, int kv_lora, int v_head, void* out_q8_1, cudaStream_t s, bool lat_q8 = false);
+/// The absorbed projections over T verify rows (1..kMaxRows): each weight row read once, each row's dot as mla().
+/// ld_q / ld_qabs / ld_ctx are floats between rows; ld_q8 is q8_1 blocks. kv_lora and v_head must be multiples of 32.
+void mla_kb_rows(const uint16_t* wk_b, const float* q, int ld_q, int n_head, int qk_nope, int kv_lora, int T,
+                 float* q_abs, int ld_qabs, cudaStream_t s);
+void mla_vb_rows(const uint16_t* wv_b, const float* ctx, int ld_ctx, int n_head, int kv_lora, int v_head, int T,
+                 void* out_q8, int ld_q8, cudaStream_t s);
+/// mla()'s attention between the absorbed projections (the split/combine or one-pass path).
+void mla_attention(const float* q_abs, const uint16_t* lat, const int* cells, int n_sel, int n_head, int qk_nope,
+                   int kv_lora, float* ctx, cudaStream_t s, bool lat_q8 = false);
 /// The INT8 latent cache (STRATA_GLM_KV_INT8): per position kv_lora int8 codes, then one FP16 scale per 32 values
 /// (symmetric, absmax / 127) - 544 bytes at kv_lora 512 against the FP16 row's 1024.
 __host__ __device__ constexpr inline int lat8_rec_bytes(int kv_lora) { return kv_lora + kv_lora / 16; }

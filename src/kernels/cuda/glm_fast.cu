@@ -1066,6 +1066,29 @@ __device__ __forceinline__ void rows_dot_bf16(const uint16_t* row, const float* 
     for (int t = 0; t < NT; ++t) s[t] = warp_sum(acc[t]);
 }
 template<int NT>
+__device__ __forceinline__ void rows_dot_bf16_ptrs(const uint16_t* row, const float* const* x, int n_in, int lane,
+                                                   float (&s)[NT]) {
+    float acc[NT];
+#pragma unroll
+    for (int t = 0; t < NT; ++t) acc[t] = 0.0f;
+    const uint4* r8 = (const uint4*) row;
+    for (int k = lane; k < n_in / 8; k += 32) {
+        const uint4 w = r8[k];
+#pragma unroll
+        for (int t = 0; t < NT; ++t) {
+            const float4* x4 = (const float4*) x[t];
+            const float4 a = x4[2 * k], b = x4[2 * k + 1];
+            acc[t] += __uint_as_float(w.x << 16) * a.x + __uint_as_float(w.x & 0xffff0000u) * a.y +
+                      __uint_as_float(w.y << 16) * a.z + __uint_as_float(w.y & 0xffff0000u) * a.w +
+                      __uint_as_float(w.z << 16) * b.x + __uint_as_float(w.z & 0xffff0000u) * b.y +
+                      __uint_as_float(w.w << 16) * b.z + __uint_as_float(w.w & 0xffff0000u) * b.w;
+        }
+    }
+#pragma unroll
+    for (int t = 0; t < NT; ++t) s[t] = warp_sum(acc[t]);
+}
+
+template<int NT>
 __device__ __forceinline__ void any_rows_dot(int type, const void* w, int row, const void* xq, const float* xf, int n_in,
                                              int lane, float (&s)[NT]) {
     switch (type) {
@@ -2198,6 +2221,41 @@ __global__ void __launch_bounds__(256) headwise_gemv_kernel(const uint16_t* __re
         const float v = s_o[lane];
         if (out) out[row0 + lane] = v;
         if (q8) q8_1_store_warp(v, q8 + row0 / 32, lane);
+    }
+}
+
+// headwise_gemv_kernel over NT rows: the same 32 output rows (one head's 32-row slice) against NT activations, the
+// weight row read once (rows_dot_bf16_ptrs).  Row t's activation starts at in + t * ld_in + h * K, its output goes
+// to out + t * ld_out, its q8_1 to q8 + t * ld_q8 (blocks).
+template<int NT>
+__global__ void __launch_bounds__(256) headwise_gemv_rows_kernel(const uint16_t* __restrict__ W,
+                                                                 const float* __restrict__ in, int ld_in, int R,
+                                                                 int K, float* __restrict__ out, int ld_out,
+                                                                 block_q8_1* __restrict__ q8, int ld_q8) {
+    __shared__ float s_o[32 * NT];
+    const int lane = threadIdx.x & 31, warp = threadIdx.x >> 5;
+    const int row0 = blockIdx.x * 32;   // R % 32 == 0: a block never straddles heads
+    const int h = row0 / R;
+    const float* xr[NT];
+#pragma unroll
+    for (int t = 0; t < NT; ++t) xr[t] = in + (size_t) t * ld_in + (size_t) h * K;
+#pragma unroll
+    for (int j = 0; j < 4; ++j) {
+        const int row = row0 + warp * 4 + j;
+        float s[NT];
+        rows_dot_bf16_ptrs<NT>(W + (size_t) row * K, xr, K, lane, s);
+        if (lane == 0)
+#pragma unroll
+            for (int t = 0; t < NT; ++t) s_o[t * 32 + warp * 4 + j] = s[t];
+    }
+    __syncthreads();
+    if (warp == 0) {
+#pragma unroll
+        for (int t = 0; t < NT; ++t) {
+            const float v = s_o[t * 32 + lane];
+            if (out) out[(size_t) t * ld_out + row0 + lane] = v;
+            if (q8) q8_1_store_warp(v, q8 + (size_t) t * ld_q8 + row0 / 32, lane);
+        }
     }
 }
 
@@ -3791,6 +3849,17 @@ void mla(const float* q, const uint16_t* wk_b, const uint16_t* wv_b, const uint1
     float* q_abs = scratch[dev];
     float* ctx = q_abs + (size_t) n_head * kv_lora;
     headwise_gemv_kernel<<<n_head * kv_lora / 32, 256, 0, s>>>(wk_b, q, kv_lora, qk_nope, q_abs, nullptr);
+    mla_attention(q_abs, lat, cells, n_sel, n_head, qk_nope, kv_lora, ctx, s, lat_q8);
+    headwise_gemv_kernel<<<n_head * v_head / 32, 256, 0, s>>>(wv_b, ctx, v_head, kv_lora, nullptr,
+                                                              (block_q8_1*) out_q8_1);
+    launch_check("mla2");
+}
+
+// the attention proper, shared by mla() and the verify window
+void mla_attention(const float* q_abs, const uint16_t* lat, const int* cells, int n_sel, int n_head, int qk_nope,
+                   int kv_lora, float* ctx, cudaStream_t s, bool lat_q8) {
+    int dev = 0;
+    cudaGetDevice(&dev);
     // the split attention: chunks of MLA_CHUNK cells, partials per (chunk, head), then the merge
     static float* part[16] = {};
     static int part_chunks[16] = {};
@@ -3834,9 +3903,40 @@ void mla(const float* q, const uint16_t* wk_b, const uint16_t* wv_b, const uint1
         mla_attn_kernel<<<n_head, 256, ((size_t) kv_lora + n_sel) * sizeof(float), s>>>(q_abs, lat, cells, n_sel,
                                                                                         qk_nope, kv_lora, ctx, lat_q8);
     }
-    headwise_gemv_kernel<<<n_head * v_head / 32, 256, 0, s>>>(wv_b, ctx, v_head, kv_lora, nullptr,
-                                                              (block_q8_1*) out_q8_1);
-    launch_check("mla2");
+    launch_check("mla_attn");
+}
+
+static void mla_headwise_rows(int T, const uint16_t* W, const float* in, int ld_in, int R, int K, int n_head,
+                              float* out, int ld_out, void* q8, int ld_q8, cudaStream_t s) {
+    const int blocks = n_head * R / 32;
+    block_q8_1* q = (block_q8_1*) q8;
+    switch (T) {
+        case 2: headwise_gemv_rows_kernel<2><<<blocks, 256, 0, s>>>(W, in, ld_in, R, K, out, ld_out, q, ld_q8); break;
+        case 3: headwise_gemv_rows_kernel<3><<<blocks, 256, 0, s>>>(W, in, ld_in, R, K, out, ld_out, q, ld_q8); break;
+        case 4: headwise_gemv_rows_kernel<4><<<blocks, 256, 0, s>>>(W, in, ld_in, R, K, out, ld_out, q, ld_q8); break;
+        case 5: headwise_gemv_rows_kernel<5><<<blocks, 256, 0, s>>>(W, in, ld_in, R, K, out, ld_out, q, ld_q8); break;
+        case 6: headwise_gemv_rows_kernel<6><<<blocks, 256, 0, s>>>(W, in, ld_in, R, K, out, ld_out, q, ld_q8); break;
+        case 7: headwise_gemv_rows_kernel<7><<<blocks, 256, 0, s>>>(W, in, ld_in, R, K, out, ld_out, q, ld_q8); break;
+        case 8: headwise_gemv_rows_kernel<8><<<blocks, 256, 0, s>>>(W, in, ld_in, R, K, out, ld_out, q, ld_q8); break;
+        default:
+            for (int t = 0; t < T; ++t)
+                headwise_gemv_kernel<<<blocks, 256, 0, s>>>(W, in + (size_t) t * ld_in, R, K,
+                                                            out ? out + (size_t) t * ld_out : nullptr,
+                                                            q ? q + (size_t) t * ld_q8 : nullptr);
+            break;
+    }
+}
+
+void mla_kb_rows(const uint16_t* wk_b, const float* q, int ld_q, int n_head, int qk_nope, int kv_lora, int T,
+                 float* q_abs, int ld_qabs, cudaStream_t s) {
+    mla_headwise_rows(T, wk_b, q, ld_q, kv_lora, qk_nope, n_head, q_abs, ld_qabs, nullptr, 0, s);
+    launch_check("mla_kb_rows");
+}
+
+void mla_vb_rows(const uint16_t* wv_b, const float* ctx, int ld_ctx, int n_head, int kv_lora, int v_head, int T,
+                 void* out_q8, int ld_q8, cudaStream_t s) {
+    mla_headwise_rows(T, wv_b, ctx, ld_ctx, v_head, kv_lora, n_head, nullptr, 0, out_q8, ld_q8, s);
+    launch_check("mla_vb_rows");
 }
 
 void swiglu_q8(const float* gate, const float* up, float limit, int n, void* hq, cudaStream_t s) {
