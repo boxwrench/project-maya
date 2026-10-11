@@ -1571,3 +1571,48 @@ gfx1100/1101 need the same tag plus gate-1 and 8K/32K speed checks on the 7900 X
 **Caveats.** Strix only; one APU and one microbench binary; end-to-end n=2 per
 cell. Report: `results/ds-nimo-wmma2-gfx11.md`, evidence
 `results/ds-nimo-wmma2-gfx11/` and nimo `~/maya-wmma2-gfx11-results/`.
+
+## E85. Strix (gfx1151) decode kernel levers: hyper-connections and MoE down
+
+**Question.** The Strix decode roofline (E77, `results/ds-decode-roofline.md`) puts
+decode at 16.7 tok/s against a 24.0 tok/s bandwidth floor and names three weak
+classes: hyper-connections `hc` 1.51 ms/token (41% of 229 GB/s), MoE down 4.81 ms
+(72%) and the DSA indexer scan 0.57 ms (66%). Can a kernel change in those classes
+close part of the gap?
+
+**Setup.** nimo, gfx1151, TheRock ROCm 10.2, worktree `maya-decode-kernels` on
+branch `exp/decode-kernels-gfx1151` from the everyday base `nimo/next2` `3fca883`
+(v1.0.32 + #96 + fused prompt MoE), `STRATA_GLM_RAM_GB=8`, frozen usage profile,
+greedy (temp 0). Per-class profile: fresh `serve.server` with `STRATA_GLM_PROF=1` +
+`STRATA_DECODE_TIMING=1` + `STRATA_GLM_NO_SPEC=1`, `receipt.sh` and preflight,
+one 1.6K-token prompt, 49 decode steps, all 12096 experts resident (99.26% VRAM
+hit, 0 disk reads/token). Kernel microbenchmark: a new `tests/hip/hc_bench.cu`
+(HIP graph, 60 calls, median) and the existing `hip_expert_kernel_bench --sweep`.
+
+**Result.** Profile: token 54.14 ms (18.47 tok/s); hc 1.514 ms = 2.80% of the token
+(hc_attn 0.768 + hc_ffn 0.740) over 141.6 MB = 93.5 GB/s (40.8% of 229); MoE down
+4.821 ms = 8.90% over 797 MB = 165.3 GB/s (72.2%); DSA indexer 0.575 ms = 1.06%
+over 87.4 MB = 152 GB/s (66.4%). hc microbench: hc1 26.60 us, hc2 21.32, hc3
+(default) 9.17 us/call with the 786 KB weights L2-resident (85.7 GB/s weight-only),
+so hc is latency-bound, not DRAM-bandwidth-bound; the serial 20-iteration Sinkhorn
+(GGUF value 20) is 2.15 us = 23%, two grid barriers 0.86 us, an empty kernel
+1.84 us. A bit-identical mode 4 (Sinkhorn on warp 4 concurrent with the
+normalise/q8 pass; x/pre/comb memcmp equal to mode 3) is only 1.047x. MoE down
+sweep: `down<22>` (IQ2_S) baseline 113.6 us, best `direct_lds_rows4` 109.0 us =
+1.042x (production 0.983x); `down<18>` (IQ3_XXS) baseline 132.4 us, best
+`direct_lds` 129.6 us = 1.021x. Wider loads (`vector_load`), more rows/wave
+(`rows8`/`direct_rows4`) and LDS staging (`direct_lds`) are already in the sweep.
+All parity tests PASS; `hip_expert_kernel_bench --parity-only --sweep` is
+620/620 bit-identical.
+
+**Decision.** CLOSED-no-gain. No change met the >=1.15x microbench gate, so none
+advanced to the >=2% end-to-end gate; the gate is arithmetically out of reach for
+these classes (hc 2.80% share, MoE down 8.90% share at best 1.042x, indexer 1.06%).
+The bit-identical hc mode 4 and the hc_bench diagnostic are on the branch; the
+production default is unchanged. The larger surviving Strix decode levers are KDA
+projections (20.3 ms, 37% of the token) and launch-gap/tail overhead.
+
+**Caveats.** Strix only; one APU; end-to-end n=2 per cell (chat 19.3/19.7,
+code 20.5/20.1, reasoning 26.0/25.9, prose 19.4/19.5; mean 21.3 tok/s).
+Report: `results/ds-nimo-decode-kernels.md`, evidence
+`results/ds-nimo-decode-kernels/`, logged E85.
