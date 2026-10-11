@@ -106,6 +106,7 @@ not controlled studies.
 | E75 | Profile | R9700 prefill profile: compute-bound, transfers hidden | KEPT |
 | E76 | Prompt speed | R9700 GEMM efficiency audit | DROPPED |
 | E77 | Prompt speed | Strix prefill disk/tier-stall hypothesis closed | DROPPED |
+| E84 | Prompt speed | gfx1151 prompt attention: wave32 WMMA (wmma2) vs f16q | KEPT-OPEN |
 
 ## Prompt speed
 
@@ -1487,3 +1488,86 @@ of the 11 arms beat baseline: LAND=96 336.8, RAM_GB=4 338.0, RAM_GB=8 335.4, RAM
 - **Measure on every architecture you claim.** gfx1151 was compiled but not run for the #39 fix; #38's wmma2 loses to f16q on Strix; #19 left gfx1201 alone (E03, E12, E30).
 - **Keep dropped ideas written down.** E05, E06, E15-E17 and E24 record why not, so they are not re-run.
 - **Say what you did not measure.** A sampled AMD short-task baseline exists (E35), but no matched NVIDIA control or AMD KL/perplexity. E40/E41 cover current long-context configs; the two-GPU #44 run remains pending (E24).
+
+### E78 - Strix: upstream PR #96 MTP vs our two-row spec loop (KEPT-OPEN: support #96; our loop DROPPED as primary)
+
+**Question.** On Strix Halo (gfx1151, 128 GB unified) does upstream #96's natural MTP decode beat our
+`perf/two-row-decode-1gpu-spec` (`STRATA_GLM_SPEC_1GPU=1`), and could our bit-identical two-column GEMV
+(`gf::mv2`) add to #96?
+
+**Setup.** nimo `build-rocm10` (TheRock ROCm 10.2, gfx1151, Release, tests ON): v1.0.32 `2908669`
+spec-off (`STRATA_GLM_NO_SPEC=1`); PR #96 `3486f6d` (on #76 `aac3d49`) natural + `MTP_TRACE`; ours
+`e7463ad` `STRATA_GLM_SPEC_1GPU=1`. Fresh `serve.server` per request, a copy of the same usage profile per
+run, 300 greedy tokens, the four sol-mtp prompts, one ~8K prompt per arm, one T=0.7 #96 run. `receipt.sh`
+±each arm; preflight 15/15; `glm_layer_parity --selftest` and `glm_model_test --selftest` PASS on all three.
+
+**Result.** tok/s chat/code/reasoning/prose: v1.0.32 19.1/19.0/19.0/19.0; #96 21.4/22.6/25.6/21.3; ours
+21.5/22.8/22.4/21.1. #96 acceptance 62-70%, 1.68-2.91 tokens/round, verify 74.5-103.9 ms/round; ours
+acceptance 68.5-81.8%, 1.69-1.82 tokens/round (verify not exposed). 8K prefill 322.8/319.1/316.7 tok/s.
+Sampled #96 19.8 tok/s, 50% accepted.
+
+**Decision.** KEPT-OPEN in favour of #96: support it with data; drop our standalone spec loop as the
+primary path. `gf::mv2` remains an optional follow-up only behind a profile showing an exposed dense-GEMV
+share; current evidence does not justify it (#96's verify is already row-amortised).
+
+**Caveats.** One request per cell (no repeats); differences <=1% are noise. Restore: everyday
+`maya-nimo-256k.json`, `/health` ok, sha `fb3b07...`/`99b02...` unchanged. Report:
+`results/ds-strix-pr96-vs-ours.md`.
+
+### E82 - R9700: Maya-M IQ2_S vs Maya-S IQ2_XXS, greedy (KEPT-OPEN: M is a modest quality win, not a long-context one)
+
+**Question.** How much better is Maya-M (`GLM-5.3-Flash-Maya-M-IQ2_S`, 109 GiB, `RAM_GB 110`) than Maya-S
+(IQ2_XXS, `RAM_GB 90`) on one R9700 (HIP device 1), same build `/ai/github/maya-main/build-multi` v1.0.32 and
+settings (131072 ctx, INT8 KV, RESERVE_MB 1024, PROMOTE_MIN 6, temperature 0)?
+
+**Setup.** Fresh `r9700-m`/`r9700-long` server per pack; `receipt.sh` + `preflight.py` around each; 3x256 warmup
+then 3x256 decode and one ~8K prompt; brief eval math 40 / MMLU-Pro 56 / HumanEval 30 / IFEval 40 / tools 12,
+re-run greedily for both packs; NIAH from `results/muse-r9700-longctx/` re-run at 32K/64K with that harness but
+an exact-match scorer; pagoda showcase with thinking off. A concurrent tuneup agent restarted the server mid-S;
+pagoda S was saved and S perf/eval/NIAH were re-run cleanly.
+
+**Result.** Weighted quality S 87.6% -> M 92.1% (+4.5 pp): MMLU-Pro 78.6->89.3, IFEval 77.5->82.5, tools
+91.7->100, math 100->97.5, HumanEval 100=100. NIAH exact 4/4 and 4/4 for both packs (the old v1.0.23 S 2/4,
+1/4 was build/tier noise, and the 44817 substring false positive is gone). M costs decode 25.0->21.9 tok/s
+(-12.4%), ~8K prompt 789->750 tok/s (-4.9%), RAM tier 63.65->81.22 GiB pinned, 80->66 slots/layer; MemAvailable
+with M loaded 87.4 GB (>=24). Both pagodas: 0 JS errors, S 3m01s / M 3m42s.
+
+**Decision.** KEPT-OPEN: M is a real but modest quality win, worth ~12% decode where MMLU-Pro/IFEval/tool-call
+accuracy matters; it is not a long-context upgrade. Server restored to `r9700-long` (S), `/health` ok, temp 0.0.
+
+**Caveats.** n=12-56 per suite carries +/-8-15 pp; single pinned-tier load per pack. Report:
+`results/ds-r9700-m-vs-s.md`, evidence `results/ds-r9700-m-vs-s/`.
+
+### E84 - Strix (gfx1151) prompt attention: wave32 WMMA (wmma2) vs rocWMMA (f16q) (KEPT-OPEN: wmma2 is the gfx1151 default on the branch)
+
+**Question.** On Strix Halo (gfx1151, 128 GB unified) is the gfx11 wave32 WMMA
+prompt-attention kernel `wmma2` faster than the rocWMMA `f16q` path, and at what
+numerical error, so that `STRATA_GLM_PREFILL_ATTN=wmma2` can become the default?
+
+**Setup.** nimo, worktree `maya-wmma2-gfx11`, branch `exp/wmma2-gfx11` from the
+everyday base `nimo/next2` `3fca883`, TheRock ROCm 10.2, gfx1151, Release. The
+gfx11 branch of `mla2_wmma` was already present from upstream #38 (`b7b8d75`);
+this run changed only the arch tag. Gate 1 `hip_glm_prefill_attention`; gate 2 a
+new kernel-alone bench (`tests/hip/glm_prefill_attn_bench.cpp`, H=64, KV=512,
+n_sel->2048, flat and 4096-token chunked); gate 3 wmma2 vs f16q on the same
+binary (sha `16d821a0...`), fresh `serve.server` per arm/cell, copied usage
+profile, `receipt.sh` + preflight per cell, 3x256 warm-up, 2 runs per prompt cell.
+
+**Result.** Gate 1 PASS, wmma2 rel L2 vs F32 3.42e-07 FP16 / 3.35e-07 INT8
+(matches gfx1100 3.42e-07/3.35e-07, inside 1e-7..1e-6); f16q 9.78e-05/9.99e-05.
+Gate 2 PASS: wmma2 1.356x/1.350x f16q at 8K flat/chunked and 1.411x/1.328x at
+32K. Gate 3: prompt 346.6/334.3 tok/s at ~8K (+3.69%), 339.5/327.1 at ~32K
+(+3.79%), 333.5/319.9 at ~64K (+4.25%); decode flat within scatter;
+`glm_layer_parity` and `glm_model_test` PASS. Greedy 3x64 output differs across
+the two kernels at the first token they disagree on (chat char 139, code 222,
+reasoning 160); both arms are deterministic on rerun, and wmma2 is the more
+accurate kernel, so this is not a quality regression.
+
+**Decision.** KEPT-OPEN: `mla_wmma2_arch()` tags gfx1151 (code 4) and
+`mla_wmma2_default()` selects wmma2 on gfx12 and gfx1151, on
+`exp/wmma2-gfx11` `7e78792` (not merged into the everyday `maya-next2` build).
+gfx1100/1101 need the same tag plus gate-1 and 8K/32K speed checks on the 7900 XT.
+
+**Caveats.** Strix only; one APU and one microbench binary; end-to-end n=2 per
+cell. Report: `results/ds-nimo-wmma2-gfx11.md`, evidence
+`results/ds-nimo-wmma2-gfx11/` and nimo `~/maya-wmma2-gfx11-results/`.
