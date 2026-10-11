@@ -5,7 +5,7 @@ built only from records that exist: the upstream PR descriptions and comments, t
 reports. Where a number is a single run, a small run, or noisy, the entry says so. Where no record exists, the entry says
 that instead of filling the gap.
 
-Last updated 2026-10-10; E49-E69 consolidate the current working records (source, CPU, build and GPU audits), and E70-E77 record the v1.0.32 everyday measurements. A machine-readable copy is kept next to the benchmark data (`experiments.jsonl`, same IDs).
+Last updated 2026-10-11; E49-E69 consolidate the current working records (source, CPU, build and GPU audits), E70-E77 record the v1.0.32 everyday measurements, and E79-E90 record the 2026-10-11 Strix decode/R9700 tuneup work. A machine-readable copy is kept next to the benchmark data (`experiments.jsonl`, same IDs).
 
 ## How to read this
 
@@ -106,7 +106,16 @@ not controlled studies.
 | E75 | Profile | R9700 prefill profile: compute-bound, transfers hidden | KEPT |
 | E76 | Prompt speed | R9700 GEMM efficiency audit | DROPPED |
 | E77 | Prompt speed | Strix prefill disk/tier-stall hypothesis closed | DROPPED |
+| E79 | Long context | Strix long-context decode: pinned RAM tier parks borrow-evicted experts | KEPT |
+| E80 | Decode speed | Single-R9700 Maya-S config tuneup | KEPT |
+| E81 | Decode speed | nimo next everyday: v1.0.32 + fused prompt MoE + PR #96 MTP + RAM_GB=8 | KEPT |
+| E83 | Decode speed | R9700 everyday config: RESERVE_MB 1024 -> 512 | ADOPTED |
 | E84 | Prompt speed | gfx1151 prompt attention: wave32 WMMA (wmma2) vs f16q | KEPT-OPEN |
+| E86 | Prompt speed | nimo everyday: wmma2 prompt attention adopted | ADOPTED |
+| E87 | Decode speed | Strix decode excess: ranked table and KDA projection saturation | CLOSED-no-gain |
+| E88 | Decode speed | Strix MLA attention split-K retune and hierarchical combine | CLOSED-no-gain |
+| E89 | Decode speed | Strix PR #96 MTP config-knob sweep | CLOSED-no-gain |
+| E90 | Decode speed | Strix MTP verify-round cost split (C2/T) | MEASURED |
 
 ## Prompt speed
 
@@ -1488,6 +1497,7 @@ of the 11 arms beat baseline: LAND=96 336.8, RAM_GB=4 338.0, RAM_GB=8 335.4, RAM
 - **Measure on every architecture you claim.** gfx1151 was compiled but not run for the #39 fix; #38's wmma2 loses to f16q on Strix; #19 left gfx1201 alone (E03, E12, E30).
 - **Keep dropped ideas written down.** E05, E06, E15-E17 and E24 record why not, so they are not re-run.
 - **Say what you did not measure.** A sampled AMD short-task baseline exists (E35), but no matched NVIDIA control or AMD KL/perplexity. E40/E41 cover current long-context configs; the two-GPU #44 run remains pending (E24).
+- **Gate kernel changes with speculation off.** With #96 MTP speculation on, end-to-end decode tracks acceptance, which moves with tiny numerical changes (an MLA rounding change moved acceptance 58% -> 68% and decode ~19 <-> ~22 tok/s), so spec-on e2e is not a valid gate; gate kernel work with `STRATA_GLM_NO_SPEC=1` (or GPU-busy ms) and gate the spec policy separately with acceptance reported (E88, E90).
 
 ### E78 - Strix: upstream PR #96 MTP vs our two-row spec loop (KEPT-OPEN: support #96; our loop DROPPED as primary)
 
@@ -1514,6 +1524,42 @@ share; current evidence does not justify it (#96's verify is already row-amortis
 `maya-nimo-256k.json`, `/health` ok, sha `fb3b07...`/`99b02...` unchanged. Report:
 `results/ds-strix-pr96-vs-ours.md`.
 
+### E79 - Strix Halo long-context decode: a pinned RAM tier parks the prompt borrow's evicted experts (KEPT: `RAM_GB=8` cuts SSD re-reads 2.79 -> 0.04/token and lifts 64K decode 15.40 -> 16.50 tok/s (+7.1%), 1.6K +3.4%, 64K prompt flat)
+
+**Question.** Why does Strix Halo decode fall after a long prompt, and can a pinned RAM tier recover it?
+
+**Setup.** nimo, gfx1151, `maya-v1032/build-rocm10` (`cb70490`, v1.0.32 + fused prompt MoE), 256-token replies after ~1.6K / ~64K / ~120K tokens from the same copied usage profile, `STRATA_GLM_PROF=1` + `STRATA_DECODE_TIMING=1` + `STRATA_GLM_TIER_DIAG=1`; `RAM_GB` 0/4/6/8/10 plus `PROMOTE_MIN=6`, `PROMOTE_FILL=96` and `RAM_RESIDENT=1`; fresh server per arm, receipts + preflight, greedy.
+
+**Result.** 64K decode 15.40 -> **16.50** tok/s (two-run mean, +7.1%), 1.6K 17.66 (+3.4%), 64K prompt 327.1 -> 327.0 t/s (-0.03%); SSD reads 2.79 -> **0.04**/token, disk wait 4.59 -> **0.12** ms/token, VRAM hit 99.14%, 1207 slots (421 parked). 4/6 GB only partly cover the borrow (15.89/16.23; reads 1.50/0.75); 10 GB covers it but is no better (16.24, reads 0.00) and pins 2 GB more. ~119K prompt: ram8 316.0 t/s / 16.02 tok/s, ram6 315.2 / 15.70. `PROMOTE_MIN=6` is harmful (11.01 tok/s, 19.74 reads/token); `PROMOTE_FILL=96` 16.60 and `RAM_RESIDENT=1` 15.44 are no-ops. Upstream PR #15 (`STRATA_GLM_RAM_SHADOW`) is absent from v1.0.32; it would do the same borrow work more adaptively (no fixed 8 GB pin) but on Strix still needs ~8 GB of tier, so it would not beat `RAM_GB=8` here.
+
+**Decision.** Adopt `STRATA_GLM_RAM_GB=8`; written to `project-maya/maya-nimo-256k-ram8.json` (sha256 `562b8e01...`); everyday `maya-nimo-256k.json` restored, `/health` ok.
+
+**Caveats.** One request per arm/cell; dated server state; all `maya-nimo-*.json` were externally rewritten to greedy (`temperature 0.0`) during the session. Report: `results/ds-strix-longctx-decode.md`, evidence `results/ds-strix-longctx-decode/`.
+
+### E80 - Single-R9700 Maya-S config tuneup (v1.0.32) (KEPT: only `RESERVE_MB 512` helps, 26.30 -> 26.66 tok/s pooled (+1.35%, 80 -> 82 slots/layer); `PREFETCH_N=1` -20%)
+
+**Question.** Which single-knob config change cheaply improves R9700 decode without a cost?
+
+**Setup.** `/ai/github/maya-main/build-multi` upstream v1.0.32 (`2908669`), HIP device 1, gfx1201, 131072 ctx, INT8 KV, RAM_GB 90, PROMOTE_MIN 6, frozen usage profile; every arm a fresh server + receipt + preflight, 3x256-token warm-up, then four prompt types x 4 x 256 greedy (last-3 mean), one ~8.1K and one ~32.2K prompt (final arm also ~119K), per-request `glm stat`.
+
+**Result.** Baseline (`RESERVE_MB 1024`) 26.18 / 26.43 tok/s (pooled 26.30, 70.6% hit, 34.6 PCIe experts/token, 63.6 CPU-lane, 80 slots). `RESERVE_MB 512` 26.70 / 26.62 (**+1.2..+2.0%**, pooled **+1.35%**), 82 slots/layer, hit 71.4%, 33.8 PCIe experts/token, prompt 8K/32K/119K 804.0 / 789.4 / 746.8 (within 0.3%, no OOM). `--prefill 32768` decode-flat 26.27 and +1.8% at 32K, but the engine auto-halves the chunk 32768 -> 16384 once decode fills the pool. `PROMOTE_MIN 4` 25.59 (-2.7%), `PROMOTE_MIN 8` 26.52, `VRAM_EVICT=lru` 26.36, `CPU_LANE=12` 26.42, `CPU_CAL` 26.50, `65536 ctx` 26.66 (+1.3%, 82 slots, halves context), combos <=+0.9%. `PREFETCH_N=1 AT=fetch BLOCKS=4 RANK=2` 21.05 (**-20%**) despite hit 74.6%: the prefetch steals the PCIe5 x16 demand fetch (#84 warning confirmed on gfx1201).
+
+**Decision.** Adopt `STRATA_GLM_RESERVE_MB=512`; do not enable `PREFETCH_N=1`; keep 131072 ctx. Deliverable `project-maya/maya-r9700-tuned-7900.json`.
+
+**Caveats.** One run per arm (baseline and `RESERVE_MB 512` repeated); CPU-lane start-up calibration varied 0.169-0.201 ms/expert, so single-arm deltas below ~2% are noise. Report: `results/ds-r9700-tuneup.md`, evidence `results/ds-r9700-tuneup/`.
+
+### E81 - nimo next everyday: v1.0.32 + fused prompt MoE (#98) + PR #96 MTP + `RAM_GB=8` (KEPT: merge `3fca883` accepted and switched; 4-type decode 18.48 -> 22.39 tok/s (+21.2%), decode after ~64K +25.8%, prompt -1.2..-1.5%)
+
+**Question.** Does merging upstream PR #96 MTP onto the v1.0.32 + fused-prompt-MoE everyday build beat the everyday config?
+
+**Setup.** nimo, gfx1151, worktree `maya-next2`, branch `nimo/next2`, merge `3fca883` = PR #96 head `3486f6d` (on #76, base v1.0.30) merged onto `cb70490` (v1.0.32 + #98 fused prompt MoE), TheRock ROCm 10.2, exe `0fb53741`; baseline `maya-nimo-256k.json` (`maya-next` v1.0.24, exe `99b0279c`); fresh `serve.server`, pristine copied usage profile, receipt + preflight, 3x256 warm-up then 256-token greedy replies; all four required tests plus `glm_mv_bench --parity-only`.
+
+**Result.** Decode tok/s chat 18.50 -> 21.40 (+15.7%), code 18.50 -> 22.80 (+23.2%), reasoning 18.45 -> 24.20 (+31.2%), prose 18.45 -> 21.15 (+14.6%), mean 18.48 -> **22.39** (**+21.2%**). Prompt 8340 338.9 -> 333.7 (-1.53%), 33117 330.5 -> 325.6 (-1.48%), 66211 324.0 -> 320.2 (-1.17%). Decode after ~64K 15.50 -> **19.50** (+25.8%); `RAM_GB=8` parks the borrow (disk 2.26 -> 0.02 reads/token, RAM tier 544/1198). Tests PASS: `glm_layer_parity`, `glm_model_test`, `hip_prefill_fused_parity`, `hip_prefill_mmq_parity`, `glm_mv_bench --parity-only` (differ=0).
+
+**Decision.** Switch nimo everyday to `maya-nimo-next.json` (262144 ctx, `temperature 0.0`, `STRATA_GLM_RAM_GB=8`); keep `maya-nimo-256k.json` (sha `25f5da27`) for rollback; `/health` ok.
+
+**Caveats.** One request per cell; six merge conflicts resolved in the commit. Report: `results/ds-nimo-next-everyday.md`, evidence `results/ds-nimo-next-everyday/`.
+
 ### E82 - R9700: Maya-M IQ2_S vs Maya-S IQ2_XXS, greedy (KEPT-OPEN: M is a modest quality win, not a long-context one)
 
 **Question.** How much better is Maya-M (`GLM-5.3-Flash-Maya-M-IQ2_S`, 109 GiB, `RAM_GB 110`) than Maya-S
@@ -1537,6 +1583,18 @@ accuracy matters; it is not a long-context upgrade. Server restored to `r9700-lo
 
 **Caveats.** n=12-56 per suite carries +/-8-15 pp; single pinned-tier load per pack. Report:
 `results/ds-r9700-m-vs-s.md`, evidence `results/ds-r9700-m-vs-s/`.
+
+### E83 - R9700 everyday config: RESERVE_MB 1024 -> 512 (ADOPTED: `RESERVE_MB 512` is now the everyday r9700-long setting, +1.35% pooled decode, 80 -> 82 slots/layer, prompt within 0.3%)
+
+**Question.** Should the `RESERVE_MB 512` tuneup win (E80) be made the everyday r9700-long setting?
+
+**Setup.** Applies E80's `results/ds-r9700-tuneup.md` to `project-maya/maya-r9700-long-7900.json`; recorded in the 2026-10-11 R9700-everyday update.
+
+**Result.** `maya-r9700-long-7900.json` now uses `STRATA_GLM_RESERVE_MB=512` (identical to `maya-r9700-tuned-7900.json`); server restarted, HEALTH-OK, temp 0.0, 131072 ctx. Backup of the 1024 version: `config-backups/temp-20261010/maya-r9700-long-7900.json.reserve1024`. Maya-S stays the everyday pack; Maya-M remains the opt-in `maya-r9700-m-7900.json` (E82).
+
+**Decision.** ADOPTED.
+
+**Caveats.** Config change traced to E80's two runs; no new benchmark. Report: `results/ds-r9700-tuneup.md` (E80).
 
 ### E84 - Strix (gfx1151) prompt attention: wave32 WMMA (wmma2) vs rocWMMA (f16q) (KEPT-OPEN: wmma2 is the gfx1151 default on the branch)
 
@@ -1616,3 +1674,63 @@ projections (20.3 ms, 37% of the token) and launch-gap/tail overhead.
 code 20.5/20.1, reasoning 26.0/25.9, prose 19.4/19.5; mean 21.3 tok/s).
 Report: `results/ds-nimo-decode-kernels.md`, evidence
 `results/ds-nimo-decode-kernels/`, logged E85.
+
+### E86 - nimo everyday: wmma2 prompt attention adopted (ADOPTED: `maya-nimo-next.json` gains `STRATA_GLM_PREFILL_ATTN=wmma2`, +3.7/+3.8/+4.3% prompt, decode flat, parity PASS; upstream PR #113 opened 2026-10-11)
+
+**Question.** Make the validated gfx1151 wmma2 prompt path (E84) the everyday default, and offer the one-line default upstream?
+
+**Setup.** nimo, gfx1151, everyday `maya-next2` binary (exe `0fb53741`), config `maya-nimo-next.json`; set env `STRATA_GLM_PREFILL_ATTN=wmma2`; backup `maya-nimo-next.json.bak-prewmma2`; server restarted, engine env verified.
+
+**Result.** Prompt +3.7 / +3.8 / +4.3% at ~8K/32K/64K; kernel-alone 1.33-1.43x; wmma2 rel L2 3.42e-07 FP16 / 3.35e-07 INT8 vs f16q 9.78e-05 / 9.99e-05; decode flat; greedy tokens change vs f16q (wmma2 is the more accurate kernel); `glm_layer_parity` and `glm_model_test` PASS. The upstream candidate (the one-line gfx1151 default in `mla_wmma2_arch`, branch `exp/wmma2-gfx11` `7e78792`) was opened as upstream PR #113 on 2026-10-11.
+
+**Decision.** ADOPTED on nimo.
+
+**Caveats.** Strix only; end-to-end n=2 per cell; gfx1100/1101 remain f16q until gate-1 plus 8K/32K checks on the 7900 XT. Report: `results/ds-nimo-wmma2-gfx11.md`, evidence `results/ds-nimo-wmma2-gfx11/`.
+
+### E87 - Strix (gfx1151) decode: ranked excess table and KDA projection saturation (CLOSED-no-gain: KDA projections are bandwidth-saturated, `kda_proj` 224.3 GB/s = 98.0% and `kda_out` 93.3% of the 229 GB/s ceiling; no variant met the 1.15x gate)
+
+**Question.** Where is the remaining Strix decode excess, and is the biggest class (KDA projections) fixable?
+
+**Setup.** nimo, gfx1151, worktree `maya-kda-gap`, branch `exp/kda-gap-gfx1151` from everyday base `nimo/next2` `3fca883`, TheRock ROCm 10.2, `RAM_GB=8`, all 12096 experts resident (99.2% VRAM hit, disk 0), frozen usage, greedy. Per-class profile `STRATA_GLM_PROF=1` + `NO_SPEC=1`, one 1.6K prompt, 49 steps; `rocprofv3 --kernel-trace`; `glm_mv_bench` isolated and in situ with `STRATA_GLM_MV_RDNA=0`; receipts before/after.
+
+**Result.** Token 54.09 ms GPU-stream (`glm stat` 55.44, 18.04 tok/s). Ranked excess over the 229 GB/s floor (ms/token): MLA 4.290, KDA+SSM 2.819, hc 1.192, MoE gate_up 1.146, router+shared 0.943, MoE route 0.816, MoE down 0.734, fetch/wait 0.582, DSA indexer 0.578, DSA projections 0.519, dense FFN 0.114. KDA: `kda_proj` 12.914 ms / 2896.7 MB = 224.3 GB/s (98.0%), `kda_out` 4.378 / 935.9 = 213.8 (93.3%), `kda_prep` 1.898 @ 82.8, `kda_rec` 1.051. Isolated `glm_mv_bench`: `kda_proj` 375.6 us / 226.9 GB/s vs RDNA-off 393.7 / 216.4, `kda_out` 125.9 / 218.6 vs 132.8 / 207.2; all 37 rows/unroll/waves/LDS variants stay below 1.15x (best 1.055x). `STRATA_GLM_MV_RDNA=0` costs 3.4% (55.93 vs 54.09). `rocprofv3`: 606.3 launches/token, 53.01 ms busy of 55.79 wall = 2.78 ms gap (5.0%). Fresh baseline 4-type mean 22.2 tok/s (n=2/cell). `glm_layer_parity`, `glm_model_test`, `glm_mv_bench --parity-only` PASS.
+
+**Decision.** CLOSED-no-gain for the KDA GEMVs (already at 98% of the ceiling, no 1.15x variant); everyday config unchanged (keep `STRATA_GLM_MV_RDNA` default). Next lead MLA, then MoE gate_up / router.
+
+**Caveats.** Strix only, one APU, one profile; end-to-end baseline n=2/cell. Report: `results/ds-nimo-kda-gap.md`, evidence `results/ds-nimo-kda-gap/`.
+
+### E88 - Strix (gfx1151) decode MLA attention split into kernels: split-K retune and hierarchical combine (CLOSED-no-gain: `MLA_CHUNK` 32->16 gives split 1.46x/1.54x and with a hierarchical combine MLA 5.670 -> 5.116 ms (-9.8%), but NO_SPEC decode moves only -0.5%, below the 2% gate)
+
+**Question.** Which MLA kernel carries the class excess, is it bandwidth- or latency-bound, and can a parity-clean change reach the 1.15x kernel / 2% e2e gates?
+
+**Setup.** nimo, gfx1151, worktree `maya-mla-decode`, branch `exp/mla-decode-gfx1151` from everyday base `nimo/next2` `3fca883`, TheRock ROCm 10.2, `RAM_GB=8`, wmma2, frozen usage, greedy; `rocprofv3 --kernel-trace`, 120 decode tokens, `NO_SPEC=1`, after 1.6K / 32K / 64K. Dims: n_head 64, qk_nope 256, kv_lora 512, v_head 256, 11 DSA layers, `MLA_CHUNK=32`, `MLA_HPB=16`.
+
+**Result.** Base 1.6K: `headwise_gemv` k_b 0.994 ms @ 185.7 GB/s, v_b 1.557 @ 118.6, `mla_split` 2.753 @ 27-29, `mla_combine` 0.366 @ 211.8, MLA total **5.670**; 32K 6.582; 64K 6.712. The kda-gap 62.5 GB/s was 369 MB / whole-class time, not a kernel rate; the two BF16 absorb matrices are 2.551 ms = 145 GB/s aggregate. `mla_split` is latency-bound: 34.8 KB of the 64 KB LDS/CU (40 CUs) = 1 block/CU, grid (53,4) = 212 blocks. `MLA_CHUNK` 32->16: split **1.891 (1.46x)** at 1.6K / **2.299 (1.54x)** at 32K, but combine grows 0.366 -> 1.024; adding a hierarchical combine (8 chunk-groups/head + merge, same online softmax) gives combine **0.669** and MLA **5.116** (**-0.55 ms, -9.8%**), `glmf` busy 53.68 -> 53.38 (-0.30, -0.56%), NO_SPEC decode 55.52 -> 55.25 (-0.5%). chunk8 regressed (MLA 6.716/8.721); the `mv_rdna` BF16 headwise path is 1.00-1.02x, below gate. Spec-on e2e is unusable: decode flips 19.2 <-> 22 tok/s tracking MTP acceptance (base 58.1% vs chunk16 67.8%, a rounding change). `glm_layer_parity`, `glm_model_test`, `glm_mv_bench --parity-only` PASS.
+
+**Decision.** CLOSED-no-gain for the >=2% e2e gate; everyday config unchanged; keep the split/combine co-design as a foundation for a graph/fused follow-up. Not shipped.
+
+**Caveats.** Strix only; deterministic NO_SPEC -0.5%; spec-on numbers are not a gate. Report: `results/ds-nimo-mla-decode.md`, evidence `results/ds-nimo-mla-decode/`.
+
+### E89 - Strix (gfx1151) PR #96 single-GPU MTP speculation: config-knob sweep (CLOSED-no-gain: keep the everyday default `DRAFT=3` + ADAPT; MTP is +17.7% over NO_SPEC (19.19 -> 22.57 tok/s) and adaptive beats fixed 2/3 by 6-9 points, but no arm clears the pre-registered bar)
+
+**Question.** Can any single MTP config knob beat the everyday default past the pre-registered bar (>=3% on the 4-type mean and >2x the default run-to-run spread)?
+
+**Setup.** nimo, gfx1151, same everyday binary `maya-next2/build-rocm10/strata` exe `0fb53741`, scratch copies of `maya-nimo-next.json` (config sha `73cf17b3`, never edited), `RAM_GB=8`, wmma2, greedy; 11 arms, each a fresh `serve.server` + receipt + preflight + copied usage profile, 3x256 warm-up, then chat/code/reasoning/prose x2 x256 plus one 256-token decode after ~33K; per reply parsed the engine's `glm stat` / `glm spec` / `glm mtp` lines.
+
+**Result.** 4-type mean tok/s: NO_SPEC **19.19**, default **22.57**, DRAFT=1 22.52, DRAFT=2 22.56, DRAFT=4 22.54, DRAFT=5 20.05, D2/ADAPT=0 21.23, D3/ADAPT=0 20.43, FIXED=1 22.81, FIXED=2 21.20, default2 22.57. MTP-on is **+17.7%** over NO_SPEC (1.177x). ADAPT settles on 1 draft (verify 71.8 ms/round, acceptance 63.6/75.3/84.8/69.3% chat/code/reasoning/prose); fixed 2/3 lose 6-9%; DRAFT=5 locks ADAPT onto length 3 (46% accept, verify 107.6 ms/round, 2.38 tok/round) -> -11.2%, 17.3 on 32K. Default chat 6 runs [21.4, 21.3, 18.7, 22.1, 22.2, 22.2]; the 18.7 is a post-32K length-3/0 transient, 5 settled runs stdev 0.40 / range 0.90; default2 reproduces the 4-type mean to 0.0%. FIXED=1 +1.1% fails the 2x-spread / 3% bar. Greedy: default2 2/2 all types, NO_SPEC differs all, others cross-layout.
+
+**Decision.** CLOSED-no-gain for config tuning; everyday config unchanged. DRAFT=2 is only a stability guard at -0.9 tok/s on 32K.
+
+**Caveats.** Strix only; 11 arms measured 03:51-04:45 with no errors; everyday server restored, `/health` ok. Report: `results/ds-nimo-mtp-sweep.md`, evidence `results/ds-nimo-mtp-sweep/`.
+
+### E90 - Strix (gfx1151) PR #96 MTP verify-round cost split: why C2/T = 1.3-1.4 (MEASURED: a T=2 verify round costs 1.43x a normal step (78.2 vs 54.7 ms, 1.6K prompt, FIXED=1, 84% accept); routed MoE and MLA run per row, and a fused union read plus shared-down once recovers ~4.7 ms/round -> C2/T 1.34 (+6% decode))
+
+**Question.** Why does a T=2 MTP verify round cost 1.3-1.4x a normal step, and where is the removable excess?
+
+**Setup.** nimo, gfx1151, `maya-next2` exe `0fb53741`, config sha `73cf17b3`, `RAM_GB=8`, wmma2, greedy, one 1.6K-prompt request; fresh server + receipt + preflight per arm. Arms: normal/verify (`STRATA_GLM_PROF=1`, T=1 vs FIXED=1 T=2), the pair without the profiler, `STRATA_GLM_ROUTE_LOG`, and `rocprofv3 --kernel-trace` for both. No code changed.
+
+**Result.** NO_SPEC normal 54.7 ms/step (18.3 tok/s); FIXED=1 verify **78.17 ms/round** (139 rounds, 84.1% accept, 1.84 tok/round) -> C2/T **1.429** (the sweep's 1.31 is at shorter prompts). Per class normal -> verify (ratio): MoE gate_up+shared down 8.745 -> 17.185 (1.97), MLA+indexer 6.539 -> 13.124 (2.01), MoE down 4.813 -> 9.106 (1.89), KDA+SSM 20.255 -> 22.132 (1.09), route 0.814 -> 1.346 (1.65), router+shared 3.946 -> 4.449 (1.13), DSA projections 5.226 -> 5.504 (1.05), hc 1.513 -> 1.623 (1.07), dense FFN 1.737 -> 1.678 (0.97), head 2.532 -> 2.264 (0.89), fetch/wait 0.500 -> 0.460 (0.92). Ranked excess: routed MoE +13.2, MLA +6.6, KDA +1.9, router +0.5, DSA +0.3 ms. `fast_moe_rows` runs routed experts per row (`glm_mtp.cu:523-540`, 2x8, no union) and reads shared-down once per row (`glm_fast.cu:2818`); `STRATA_GLM_ROUTE_LOG` over 33 T=2 rounds x 42 layers: union 13.671/16 (14.6% overlap) => routed 4779 -> 4084 MB, shared-down 578 -> 289 MB. `mv_rows` reads weights once for NT rows (`glm_fast.cu:1022-1026`); `glm_mv_bench` nt=1 -> nt=2 1.01-1.08x (bit-exact). Counterfactual: routed union + shared-down once -4.7 ms => C2/T 1.343 (+6% decode); + batched MLA k_b/v_b (2.551 ms) => 1.297 (+9%); the literal matched-single-row 1.223 is not physical. `perf/two-row-decode-1gpu-spec` `MoePlan2` unions plan/fetch but `moe_gate_up2_kernel` still reads weights per row, so on all-resident Strix it captures almost none of the 696 MB.
+
+**Decision.** MEASUREMENT ONLY (no kernel change). Recommend a truly fused union read (idea B) reusing the union plan, gated on NO_SPEC busy-ms; cheaper first step is batching MLA k_b/v_b. Everyday server restored, `/health` ok. Do not post.
+
+**Caveats.** Strix only; 33-round route log; one 1.6K prompt. Report: `results/ds-nimo-verify-cost.md`, evidence `results/ds-nimo-verify-cost/`.
