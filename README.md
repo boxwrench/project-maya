@@ -9,12 +9,11 @@ it is, how to run it, and what's next.
 > TheRock nightlies have been evaluated on Strix Halo and R9700. The tested R9700 nightly regresses prompt speed;
 > keep its ROCm 7.2.1 everyday build ([E46](EXPERIMENTS.md#e46---r9700-isolated-therock-runtime-comparison-dropped)).
 >
-> **Known issue:** Maya v1.0.15/16 can still crash with "illegal memory access" on AMD. It happens most often with
-> long prompts and RAM-heavy modes (`STRATA_GLM_RAM_RESIDENT` and RAM shadows [#15](https://github.com/mw00/project-maya/pull/15)),
-> and occasionally with the default tiers. Review found an async table-update race, a resident-mode background-promotion
-> race, and a router path that indexes `INT_MAX` after NaN scores. A fix is being verified. Until then, on one R9700 or
-> RX 7900 XT keep prompts short and use the default tiers unless running the tested integration fixes.
-> The Strix integration build has completed recall requests through ~240K tokens.
+> **Crash fix merged.** The "illegal memory access" reports on AMD were traced to an async table-update race, a
+> resident-mode background-promotion race, and a router path that indexed `INT_MAX` after NaN scores. The fixes are
+> upstream as of v1.0.32 (PR [#39](https://github.com/mw00/project-maya/pull/39)). The tested integration build has
+> completed recall requests through ~240K tokens on Strix. RAM shadows
+> ([#15](https://github.com/mw00/project-maya/pull/15)) remain on hold.
 
 ## What works
 
@@ -41,60 +40,80 @@ memory implications. M/L speeds have not been measured on our AMD machines.
 
 ## How fast
 
-Maya-S v2 mixed quant (IQ2_XXS gate/up experts), greedy, measured on our machines. These are setup-specific results: prompt lengths,
-ROCm versions and run counts differ, so the notes say when a number is a small or single run.
+Maya-S v2 mixed quant (IQ2_XXS gate/up experts), greedy, measured on our machines. These are setup-specific results:
+prompt lengths, ROCm versions and run counts differ, so the notes label single runs and small samples.
 
 | Setup | Prefill | Decode | Notes |
 |---|---|---|---|
-| RX 7900 XT (20 GB) | ~415 tok/s | ~15-16.4 tok/s | Local v1.0.15 baseline; [#19](https://github.com/mw00/project-maya/pull/19) reports ~16.4 with faster RDNA3/3.5 kernels. The v1.0.23 integration build measures ~570 tok/s prefill at 4K and ~18.3 tok/s decode (90 GB RAM). RAM shadows [#15](https://github.com/mw00/project-maya/pull/15) are on hold. |
-| AI PRO R9700 (32 GB) | ~782 tok/s at 8K, ~743 at 119K (128K context, INT8 latents) | ~25 tok/s (256-token replies, 90 GB RAM + tips below) | v1.0.23 integration build + [#38](https://github.com/mw00/project-maya/pull/38)/[#39](https://github.com/mw00/project-maya/pull/39), `PROMOTE_MIN=6`, three scored requests per arm. With 48 GB RAM the same build gives 21.2-21.5 tok/s decode. The earlier 28.1 figure was a measurement artifact (see the correction below). |
-| Strix Halo (128 GB unified) | ~343/337/327/314 tok/s at 8K/32K/64K/120K (262144 context, FP16 latents) | ~17 short-prompt / ~15.5 after 120K (256-token replies) | v1.0.24 + prompt-tail skip + fused gfx11 MoE fix, TheRock ROCm 10.2. One request per cell; reserving 262K instead of 64K changes matched-length prompt speed by at most 1.6%. All experts fit at startup, but prompt lending evicts some; decode still fetches from disk. See [E41](EXPERIMENTS.md#e41---strix-long-context-ladder-kept). |
-| R9700 + RX 7900 XT | ~690/~756 tok/s at 4K/8K | ~38 tok/s | v1.0.23 integration build, [#14](https://github.com/mw00/project-maya/pull/14) layer split, MTP drafts on the second card, ~76% accepted. |
+| AI PRO R9700 (32 GB) | ~799 tok/s at 8K, ~796 at 32K | ~24.8 tok/s (256-token replies) | Maya v1.0.32, 128K context, INT8 latents, RAM tier 90 GB, reserve 1024 MB. ~743 tok/s at 119K on v1.0.23; not re-measured on v1.0.32. Single runs of small prompt samples. |
+| Strix Halo (128 GB unified) | ~348 / ~337 / ~327 / ~314 tok/s at 8K/32K/64K/120K | ~17 short-prompt; ~15.5 after 121K | Maya v1.0.24+ (prompt-tail skip + fused gfx11 MoE fix), TheRock ROCm 10.2, FP16 latents, 262144 context. The larger 262K window costs at most ~1.6% at matched lengths, so it is "at no cost" in practice. One request per cell. |
+| Strix Halo, single-GPU speculation prototype | not measured | +5–21% decode by prompt type, token-identical | Our prototype. **Unmerged** and not the everyday configuration; overlaps upstream [#76](https://github.com/mw00/project-maya/pull/76)/[#96](https://github.com/mw00/project-maya/pull/96). |
+| R9700 + RX 7900 XT | ~690 tok/s at 4K, ~756 at 8K | ~38 tok/s | Maya v1.0.23 integration build (not re-measured on v1.0.32), [#14](https://github.com/mw00/project-maya/pull/14) layer split, MTP drafts on the second card, ~76% accepted. |
+| RX 7900 XT (20 GB) | ~570 tok/s at 4K | ~18.3 tok/s | v1.0.23 integration build, 90 GB RAM. Our upstream [#95](https://github.com/mw00/project-maya/pull/95) comment measures RDNA GEMV here at +1.1% decode, bit-exact. RAM shadows [#15](https://github.com/mw00/project-maya/pull/15) are on hold. |
 
 The test box with the discrete cards has 192 GB of RAM, so experts that don't fit in VRAM come from pinned RAM rather
 than the SSD. With less RAM, decode is slower.
 
-> **Correction (2026-10-09).** The single-R9700 decode figure was 28.1 tok/s, and the apparent drop to about 22 on later
-> builds was taken as a regression. Neither holds. The 28.1 run's replies averaged about 26 tokens; short replies stay on
-> VRAM-resident experts and decode faster (a 32-token reply gives 24.6 tok/s). With 256-token replies, v1.0.16 and v1.0.23
-> both give 21.2-21.5 tok/s at 48 GB RAM. No decode regression was found.
->
-> **Tips for one R9700 (2026-10-09).** Measured with 256-token replies at 40K context, 48 GB RAM unless noted:
-> - `STRATA_GLM_RESERVE_MB=1024`: 82 instead of 75 expert slots per layer, 22.6 tok/s (+5.3%).
-> - `STRATA_GLM_RAM_GB=90`: 24.5 tok/s (+14.2%).
-> - Both together: 25.0 tok/s (+16.5%). Prompt speed is unaffected (about 800 tok/s at 28K).
->
-> **Recommended R9700 settings (2026-10-09).** For everyday use on one R9700 with plenty of host RAM: 128K context
-> (`--max-context 131072`) with `STRATA_GLM_KV_INT8=1`, `STRATA_GLM_RAM_GB=90`, `STRATA_GLM_RESERVE_MB=1024`,
-> `STRATA_GLM_PROMOTE_MIN=6`. That holds ~25 tok/s decode and ~782 tok/s prompt speed at 8K (~743 at 119K) —
-> within 1-2% of the 40K-context speed. The 1M model maximum runs but costs 12% decode and 31-37% prompt speed.
+> **Correction (2026-10-09).** The single-R9700 decode figure was 28.1 tok/s, and the apparent drop to about 22 on
+> later builds was taken as a regression. Neither holds. The 28.1 run's replies averaged about 26 tokens; short replies
+> stay on VRAM-resident experts and decode faster. With 256-token replies, v1.0.16 and v1.0.23 both give 21.2–21.5
+> tok/s at 48 GB RAM. No decode regression was found. The current ~24.8 tok/s uses the 90 GB RAM tier and reserve
+> settings below.
 
-> **Strix context choice (2026-10-09).** The tested integration config uses `--max-context 262144 --prefill 32768`,
-> FP16 latents, `STRATA_GLM_PREFILL_SUB=4096`, `STRATA_GLM_PREFILL_MB=12288`, and the gfx1151 hipBLASLt table for
-> library version 100500. The pool retains 12,096 expert slots (80.17 GB) with 3.32 GB of state/KV reserved.
-> Muse reports 12/12 single-needle and 4/4 multi-hop hits through ~240K; raw logs confirm those request lengths,
-> but the reply texts were not retained for independent rescoring. This is a small recall sample, not a general
-> quality result. Longer actual prompts still reduce decode speed; the small reservation cost is a separate finding.
+### Recommended settings
+
+- **One R9700, everyday:** 128K context (`--max-context 131072`) with INT8 latents (`STRATA_GLM_KV_INT8=1`),
+  `STRATA_GLM_RAM_GB=90`, `STRATA_GLM_RESERVE_MB=1024`, `STRATA_GLM_PROMOTE_MIN=6`. That holds ~24.8 tok/s decode and
+  ~799/~796 tok/s prompt speed at 8K/32K. A larger prompt chunk of 32768 measured +4.1% at 32K (single run). The 1M
+  model maximum runs but costs ~12% decode and 31–37% prompt speed.
+- **Strix Halo, everyday:** `--max-context 262144 --prefill 32768`, FP16 latents, `amd_iommu=off`. The pool retains
+  12,096 expert slots (80.17 GB); reserving 262K instead of 64K changes matched-length prompt speed by at most 1.6%.
+- **Two cards:** `--gpus 0,1`; setup puts the larger card first. GPU numbers follow the KFD order that `--check` prints.
+
+> **Strix context (2026-10-09).** Muse reports 12/12 single-needle and 4/4 multi-hop hits through ~240K; raw logs
+> confirm those request lengths, but the reply texts were not retained for independent rescoring. This is a small
+> recall sample, not a general quality result. Longer actual prompts still reduce decode speed.
 
 Current-base gfx1151 fused-MoE validation (v1.0.26): same-binary prefill
 +11.3%/+7.1%/+5.1% at ~4K/~8K/~16K; 48 fused-parity cases pass.
 Small sequential samples, provenance gaps and 3/9 changed prefill replies
-prevent a quality-equivalence claim. Everyday 262K server restored; no new
-default/code push. See [E48](EXPERIMENTS.md#e48---gfx1151-fused-moe-on-v1026-kept).
+prevent a quality-equivalence claim. Everyday 262K server restored; the fix is
+now open upstream as [#98](https://github.com/mw00/project-maya/pull/98).
+See [E48](EXPERIMENTS.md#e48---gfx1151-fused-moe-on-v1026-kept).
+
+## Where the time goes (theoretical vs actual)
+
+A public summary of the efficiency audits. Estimates are labelled; everything else is a measurement on our machines.
+
+- **Prefill is compute-bound on both chips.** On Strix, removing all SSD re-reads gave no prefill gain (single run),
+  and the phase profile shows the time in compute, not copies. Prompt-side optimizations should target math, not I/O.
+- **Where R9700 prefill time goes (measured shares, one profile):** attention ~21%, KDA projections ~19%, MoE ~27%,
+  the rest in the remaining dense projections and glue. This is why MoE and attention kernels are the prefill levers.
+- **GEMM tuning is a small lever.** The hipBLASLt GEMMs already run at ~66% of the R9700's FP16 peak (154 TFLOPS at
+  2350 MHz), but GEMMs are only ~11% of prefill time. Better GEMM selection is worth roughly 1–4% end-to-end
+  (estimate); FP8 GEMMs could be ~2x for the future. GEMM tuning is parked for now.
+- **The other engines are not a like-for-like comparison.** Halogen/Gufo/CIRU prefill looks several times faster
+  because their Qwen3.8-Flash-Next activates ~6B parameters per token, against GLM's ~18B. Very roughly ~3x of the gap
+  is the model and ~1.5x is engine efficiency (estimates, different engines and quants, not rerun by us).
+- **Decode is a bandwidth ceiling.** Strix Halo's quant reads ~9 GB of weights per token against ~240 GB/s, giving a
+  rough ~28–30 tok/s ceiling; the measured ~17–18 tok/s is below it. Closing that gap needs a smaller quant, more
+  VRAM, or speculation.
+
+The R9700 prefill profile is [E75](EXPERIMENTS.md#e75---r9700-prefill-profile-compute-bound-transfers-hidden-kept),
+the GEMM audit is [E76](EXPERIMENTS.md#e76---r9700-gemm-efficiency-audit-dropped), and the closed Strix disk/tier
+hypothesis is [E77](EXPERIMENTS.md#e77---strix-prefill-disktier-stall-hypothesis-closed-dropped).
 
 ## Quality sanity check
 
-The shared single-GPU speculation prototype on Strix has an independently
-verified4x300 token match and observed21–23 tok/s, but its ON/OFF binaries
-differ, two timing-gate cells exceed1.4 and final-build test evidence is
-incomplete. It is not the everyday configuration or a claimed R9700 speedup;
-see [E47](EXPERIMENTS.md#e47---two-row-decode--single-gpu-speculation-prototype-open).
+One R9700, 128K INT8 config: math (GSM8K) 37/40 (92.5%), MMLU-Pro 48/56 (85.7%), HumanEval 30/30 (100%),
+IFEval 29/40 strict (72.5%) / 35/40 loose (87.5%), tools 11/12. All 183 short-task cases completed without request
+errors or truncation. Writing was coherent but missed some explicit constraints. These are **small samples of a
+~2-bit quant**, not full benchmark or AMD/NVIDIA equivalence claims.
 
-One R9700, 128K INT8 config: GSM8K 37/40, MMLU-Pro 48/56, HumanEval 30/30,
-IFEval 29/40 strict (35/40 loose), tools 11/12. All 183 short-task cases completed
-without request errors or truncation. Writing was coherent but missed some explicit
-constraints. These are small samples, not full benchmark or AMD/NVIDIA equivalence
-claims. See [QUALITY.md](QUALITY.md) for method, grading correction and limitations.
+Long-context needle-in-a-haystack recall at 32–122K sometimes garbles exact digits (for example 4817→4481,
+KQ-2291→KQ-2219), while multi-hop sums score 3/3; quant precision is one hypothesis, not an established cause.
+See [QUALITY.md](QUALITY.md) for method, the grading correction and limitations, and
+[E44](EXPERIMENTS.md#e44---niah-recall-garbles-exact-digits-open).
 
 ## How to run it
 
@@ -134,13 +153,16 @@ and [NOTES.md](NOTES.md#hip--rocm-lessons) for the earlier Strix evaluation path
 | [#24](https://github.com/mw00/project-maya/pull/24) | PCIe link wake and RAM-demotion serving | merged, v1.0.15 |
 | [#25](https://github.com/mw00/project-maya/pull/25) | RAM-resident expert tier | merged, v1.0.15 |
 | [#26](https://github.com/mw00/project-maya/pull/26) | `PROMOTE_MIN`, to avoid one-off promotions | merged, v1.0.15 |
-| [#38](https://github.com/mw00/project-maya/pull/38) | RDNA4 `wmma2` prompt attention | open; rebased, awaiting maintainer's CUDA check |
-| [#39](https://github.com/mw00/project-maya/pull/39) | Fix tier/lending races + invalid-route indexing (crash fix) | open; rebased, awaiting maintainer's CUDA check |
+| [#38](https://github.com/mw00/project-maya/pull/38) | RDNA4 `wmma2` prompt attention | merged |
+| [#39](https://github.com/mw00/project-maya/pull/39) | Fix tier/lending races + invalid-route indexing (crash fix) | merged |
 | [#52](https://github.com/mw00/project-maya/pull/52) | HIP mappings for the device queries #44 uses (build fix) | merged |
-| [#61](https://github.com/mw00/project-maya/pull/61) | Skip the last layer's unused prompt outputs on one device (+1-1.4%, byte-identical) | open |
+| [#61](https://github.com/mw00/project-maya/pull/61) | Skip the last layer's unused prompt outputs on one device (+1-1.4%, byte-identical) | merged |
+| [#98](https://github.com/mw00/project-maya/pull/98) | Fused prompt MoE on Strix Halo gfx1151 (+13.5/+8.1/+5.0% at 4/8/16K) | open |
 
-The community PRs #24-#26 were merged in v1.0.15; the HIP fix needed by #24 is in upstream too. [#15](https://github.com/mw00/project-maya/pull/15)
-is open and on hold while the crash is fixed.
+We also posted measurements on upstream PRs:
+[#95](https://github.com/mw00/project-maya/pull/95) (RDNA GEMV on RX 7900 XT: +1.1% decode, bit-exact) and
+[#96](https://github.com/mw00/project-maya/pull/96) (single-GPU MTP on R9700: the gate keeps it off at ~28% experts in
+VRAM; forced, it gives reasoning +12.6%, chat +5.5%, code +3.3%, prose −4.6%).
 
 Also see the [roadmap](ROADMAP.md), the [engineering notes](NOTES.md) and the [experiment log](EXPERIMENTS.md).
 

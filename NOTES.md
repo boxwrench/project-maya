@@ -59,18 +59,27 @@ unchanged (the same tokens on V100s) before merging. Nothing was merged on an AI
 - **Pinned update buffers:** an async H2D copy from a pinned table-update buffer must finish before that buffer is
   rewritten. Synchronizing a separate copy stream is not enough when the update is queued on the nonblocking stream;
   the next prompt-lending boundary can otherwise change the source while the DMA is still reading it.
-- **IOMMU on Strix:** the setting affects performance. A separate Strix engine measured `amd_iommu=off` at 13-16%
-  faster prefill than passthrough on one machine, with the difference attributed to the power and clock envelope.
-  Maya has not measured this setting yet; it also changes DMA translation machine-wide.
+- **IOMMU on Strix:** the setting affects prompt speed. On the Strix box, `amd_iommu=off` measured +13%/+11%/+15% prefill
+  at ~4K/~8K/~16K versus IOMMU on, with decode unchanged (one request per size; before/after separated by a reboot, so
+  other host state could differ). A separate Strix engine reported a similar 13-16% gain. It disables DMA translation
+  machine-wide (and the NPU), so it is a host setting, not an upstream default. See E08.
 
 ## Where the time goes
 
-- **Strix Halo decode** (55.9 ms per token): dense matrix-vector work ~50% (already ~91% of memory bandwidth), expert
-  kernels ~27%, attention and small kernels the rest. Tiers don't matter: 99.9% of experts are hit in GPU memory.
+- **Strix Halo decode** (~54.4 ms per token in one profile): dense GEMV and projections 29.78 ms (~55%), routed expert
+  kernels 13.59 ms (~25%), attention 7.21 ms (~13%), the remaining small kernels the rest. The chip's memory bandwidth
+  is the wall.
 - **One discrete card:** decode depends on how many experts are in VRAM and how misses are served. The CPU computes
   part of the RAM-tier experts while PCIe carries the rest, and that split is worth ~11 tok/s on two GPUs. On one R9700,
   `STRATA_GLM_RESERVE_MB=1024` (+5.3%) and a 90 GB RAM tier (+14.2%) add expert slots and speed decode (see README).
-- **Prompts:** MoE work ~45%, attention ~20% (less after #16), dense GEMMs ~20%. Host planning is negligible.
+- **Prompts are compute-bound on both chips.** On Strix, removing all SSD re-reads gave no prefill gain and the copy
+  lane stayed under 30% busy. On the R9700 the measured prefill shares are attention ~21%, KDA projections ~19%, MoE
+  ~27%, and the remaining dense projections and glue, with the transfers hidden. Prompt work should target math, not
+  I/O. A larger prompt chunk (32768 vs 13312 tokens) measured +4.1% at 32K.
+- **GEMM headroom is small.** The R9700's hipBLASLt prompt projections average ~101 TFLOPS, about 66% of the chip's
+  ~154 TFLOPS FP16 peak at 2350 MHz, but GEMMs are only ~11% of prefill wall time. Better selection is worth an
+  estimated 1-4% end-to-end; FP8 GEMMs could be ~2x once a pack exists. GEMM tuning is parked until the compute-bound
+  kernels below it are addressed.
 
 ## Things that looked like bugs and weren't
 
@@ -82,13 +91,14 @@ unchanged (the same tokens on V100s) before merging. Nothing was merged on an AI
   That was wrong. The first reproducible fault was in the RAM-shadow option (#15), and on Maya v1.0.14 it reproduced on
   one card within a few requests, always in the prefill of a new request. Lesson: "it went away for 80 rounds" isn't a
   root cause. Keep the failing configuration and bisect it.
-- **AMD illegal-memory-access root cause (review; fix verification ongoing).** The highest-priority race is the table
+- **AMD illegal-memory-access root cause (fixed, v1.0.32).** The highest-priority race was the table
   update described above: boundary A queues an H2D copy, then prompt lending or boundary B rewrites the same pinned
   `upd_key_h`/`upd_val_h` buffers before the earlier DMA has consumed them. Device tables then disagree with the host's
-  slot ownership. Resident mode adds a second race where a background promotion can publish a slot after lending has
+  slot ownership. Resident mode added a second race where a background promotion could publish a slot after lending had
   borrowed it. Corrupted weights can produce NaN router scores; the top-k routers retain `INT_MAX` for an all-NaN row
-  and then use it as a table index. The fix needs to wait on the right stream, retire moves before lending, and reject
-  invalid route IDs rather than clamp them into a plausible answer.
+  and then use it as a table index. The fix waits on the right stream, retires moves before lending, and rejects
+  invalid route IDs rather than clamping them into a plausible answer. It merged upstream as
+  [#39](https://github.com/mw00/project-maya/pull/39) in v1.0.32.
 - **Greedy output that differs between runs on HIP.** Expert placement decides which experts the CPU computes, and that
   changes floating-point rounding. Compare runs by coherence and acceptance, not exact text, unless you pin the tiers.
 

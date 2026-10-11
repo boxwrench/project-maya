@@ -5,7 +5,7 @@ built only from records that exist: the upstream PR descriptions and comments, t
 reports. Where a number is a single run, a small run, or noisy, the entry says so. Where no record exists, the entry says
 that instead of filling the gap.
 
-Last updated 2026-10-09; E45-E46 record the R9700 follow-up audit and runtime comparison. A machine-readable copy is kept next to the benchmark data (`experiments.jsonl`, same IDs).
+Last updated 2026-10-10; E49-E69 consolidate the current working records (source, CPU, build and GPU audits), and E70-E77 record the v1.0.32 everyday measurements. A machine-readable copy is kept next to the benchmark data (`experiments.jsonl`, same IDs).
 
 ## How to read this
 
@@ -31,7 +31,7 @@ not controlled studies.
 |---|---|---|---|
 | E01 | Prompt speed | hipBLASLt tables, sub-batch and chunk size | KEPT |
 | E02 | Prompt speed | rocWMMA prompt attention and FP16 MLA products | KEPT |
-| E03 | Prompt speed | wmma2 prompt attention on RDNA4 | KEPT-OPEN |
+| E03 | Prompt speed | wmma2 prompt attention on RDNA4 | KEPT |
 | E04 | Prompt speed | Fused WMMA prompt MoE on Strix Halo | OPEN |
 | E05 | Prompt speed | Strata's fused int8 WMMA prompt MoE on discrete cards | OPEN |
 | E06 | Prompt speed | llama.cpp RDNA4 MMQ patch | DROPPED |
@@ -39,7 +39,7 @@ not controlled studies.
 | E08 | Prompt speed | amd_iommu=off on Strix Halo | KEPT |
 | E09 | Prompt speed | --prefill auto (PR #44) on Strix Halo | OPEN |
 | E10 | Prompt speed | Why 256-token prompts are slow | DROPPED |
-| E11 | Prompt speed | Terminal-layer prefix skip in single-GPU prefill | KEPT-OPEN |
+| E11 | Prompt speed | Terminal-layer prefix skip in single-GPU prefill | KEPT |
 | E12 | Decode speed | Faster decode expert kernels on RDNA3/3.5 | KEPT |
 | E13 | Decode speed | Decode expert kernels for RDNA4 (R9700) | DROPPED |
 | E14 | Decode speed | CPU expert lane plans (two GPUs) | DROPPED |
@@ -58,8 +58,8 @@ not controlled studies.
 | E27 | Strix Halo | Host state on the Strix box (GTT use, IOMMU, background services) | FIXED |
 | E28 | Stability | HIP doorbell publication and KDA test initialisation | FIXED |
 | E29 | Stability | First attribution of the memory fault: interference (wrong) | FIXED |
-| E30 | Stability | Root causes of the illegal memory access, and the fix (#39) | KEPT-OPEN |
-| E31 | Stability | Rebasing #38 and #39 onto v1.0.21 and v1.0.23 | KEPT-OPEN |
+| E30 | Stability | Root causes of the illegal memory access, and the fix (#39) | KEPT |
+| E31 | Stability | Rebasing #38 and #39 onto v1.0.21 and v1.0.23 | KEPT |
 | E32 | Stability | #44 breaks the HIP build (#52) | FIXED |
 | E33 | Long context | Long prompts on one R9700, before the fix | FIXED |
 | E34 | Long context | KV ring (#41) and 64K context on Strix Halo | KEPT |
@@ -77,6 +77,35 @@ not controlled studies.
 | E46 | Runtime | R9700 isolated TheRock runtime comparison | DROPPED |
 | E47 | Shared decode | Two-row decode / single-GPU speculation prototype | OPEN |
 | E48 | Prompt speed | gfx1151 fused MoE on v1.0.26 | KEPT |
+| E49 | Profile | Strix existing cold-prefix phase profile audited | KEPT |
+| E50 | CPU preparation | Rotating CPU calibration | OPEN |
+| E51 | Source/CPU preparation | GLM applicability and selector oracle | OPEN |
+| E52 | Compile preparation | IQ2_XXS BF16 WMMA | OPEN |
+| E53 | Reference audit | Halogen/CIRU/Gufo applicability | OPEN |
+| E54 | Read-only audit | R9700 health and table-gap leads | OPEN |
+| E55 | Documentation | S-v2/M/L quant recipes and untested estimates | OPEN |
+| E56 | Upstream audit | Maya/Strata PR acceptance and applicability | OPEN |
+| E57 | GPU validation | Strix CIRU-inspired BF16 synthetic comparison | DROPPED |
+| E58 | CPU follow-up | R9700 Lt2048/calibration applicability | OPEN |
+| E59 | CPU preparation | BF16 grouped64 + cleaned timing | KEPT |
+| E60 | Strix GPU benchmark | BF16 v2 faster prototype; native still wins | DROPPED |
+| E61 | Public-source research | Prefill commit methodology and tracking baseline | KEPT |
+| E62 | Public-source research | Radiance R9700 prefill methodology and applicability | KEPT |
+| E63 | Single-card CPU preparation | Radiance TP1 dispatch and native IQ packing leads | KEPT |
+| E64 | Public XeStrata audit | Release techniques and focused commit applicability | KEPT |
+| E65 | R9700 actual-shape GPU | E58 dispatch/parity and matched timing | KEPT |
+| E66 | R9700 model prefill A/B | Original versus one-row-filtered Lt table | DROPPED |
+| E67 | Two-PC validation queue | Packed-X qualification and native/Lt2048 refinements | OPEN |
+| E68 | Public ROCmFPX audit | Long-context claim, commit mechanisms and comparability | KEPT |
+| E69 | Documentation consolidation | Audited public drafts + current 69-ID summary/lead merge | KEPT |
+| E70 | Single R9700 v1.0.32 | Restored everyday server on upstream v1.0.32 | KEPT |
+| E71 | Prompt speed | Strix v1.0.32 rebase + fused prompt MoE (PR #98) | KEPT-OPEN |
+| E72 | Shared decode | Two-row single-GPU speculation on Strix (v1.0.32 rebase) | OPEN |
+| E73 | Shared decode | Upstream #96 single-GPU MTP on R9700 | OPEN |
+| E74 | Decode speed | Upstream #95 RDNA GEMV on RX 7900 XT | KEPT-OPEN |
+| E75 | Profile | R9700 prefill profile: compute-bound, transfers hidden | KEPT |
+| E76 | Prompt speed | R9700 GEMM efficiency audit | DROPPED |
+| E77 | Prompt speed | Strix prefill disk/tier-stall hypothesis closed | DROPPED |
 
 ## Prompt speed
 
@@ -103,7 +132,7 @@ PR #7 table (8K context): 7900 XT ~50 -> ~198 -> ~253-259 -> ~413; Strix Halo ~7
 
 **Caveats.** Local ladder is on the 7900 XT only and the arm labels are taken from directory names; early arms are single-request at 4K. Strix and R9700 figures are from the PR table only; no raw files found for them. Decode was 12.5-15.3 tok/s across these arms and was not the target.
 
-**Evidence.** [#7](https://github.com/mw00/project-maya/pull/7); local evidence: /ai/github/Maya-data/benchmarks/20261007-7900xt-ram-comparison/ (ram90*, summary.json per arm)
+**Evidence.** [#7](https://github.com/mw00/project-maya/pull/7); local evidence (ram90*, summary.json per arm)
 
 ### E02 - rocWMMA prompt attention and FP16 MLA products (KEPT)
 
@@ -123,7 +152,7 @@ The Strix runs are noisy (one baseline run at 184). A local rerun on the 7900 XT
 
 **Caveats.** Strix runs are noisy and n=3. Decode unchanged, not a target.
 
-**Evidence.** [#16](https://github.com/mw00/project-maya/pull/16); local evidence: /ai/github/Maya-data/benchmarks/20261008-v1011-prompt2/p2/summary.json (7900 XT: 431.6 tok/s at 4K, n=2; 275.8 at 2K, n=1)
+**Evidence.** [#16](https://github.com/mw00/project-maya/pull/16); local evidence (7900 XT: 431.6 tok/s at 4K, n=2; 275.8 at 2K, n=1)
 
 ### E03 - wmma2 prompt attention on RDNA4 (KEPT-OPEN)
 
@@ -142,7 +171,7 @@ On Strix Halo f16q measured 251 tok/s against 237-247 for wmma2 at 4-7K prompts,
 
 **Caveats.** Two requests per cell. After the rebase the parity numbers have not been re-run on a GPU (build only). Strix comparison range is from the PR text, no raw file found.
 
-**Evidence.** [#38](https://github.com/mw00/project-maya/pull/38); [#41](https://github.com/mw00/project-maya/pull/41); local evidence: /ai/github/Maya-data/agent-tools/results/sol-rebase-38-39.md; local evidence: /ai/github/Maya-data/agent-tools/results/muse-local-integration.md
+**Evidence.** [#38](https://github.com/mw00/project-maya/pull/38); [#41](https://github.com/mw00/project-maya/pull/41); local evidence
 
 ### E04 - Fused WMMA prompt MoE on Strix Halo (OPEN)
 
@@ -160,11 +189,11 @@ On Strix Halo f16q measured 251 tok/s against 237-247 for wmma2 at 4-7K prompts,
 
 A 556-token prompt with 200-token decode measured 18.1 ON and 18.0 OFF (noise, as expected for a prefill-only change). The earlier run, made before the fix and with parity failing, was one request per cell at +8.5% (4K), +5.8% (8K) and +5.0% (16K); it is not usable as a result.
 
-**Decision.** Fixed and measured on Strix (gfx1151). Rebased to v1.0.26 and freshly validated in E48; still no code push or PR. The gfx11 runtime gate admits gfx1151 only. The RX 7900 XT (gfx1100) keeps MMQ; enabling it needs a gfx1100 kernel image, an allowlist entry, and its own parity and A/B runs on that card.
+**Decision.** Fixed and measured on Strix (gfx1151). Rebased to v1.0.26 and freshly validated in E48; at the time there was no code push or PR, but the work was later opened upstream as [#98](https://github.com/mw00/project-maya/pull/98) (see E71). The gfx11 runtime gate admits gfx1151 only. The RX 7900 XT (gfx1100) keeps MMQ; enabling it needs a gfx1100 kernel image, an allowlist entry, and its own parity and A/B runs on that card.
 
 **Caveats.** Three repeats per size, run sequentially, with no confidence interval; prompt sizes differ from the earlier run. Greedy text is not byte-identical between ON and OFF (floating-point and quantization differences). The coherence checks are smoke tests, not a quality evaluation. No gfx1100 or gfx12 hardware run.
 
-**Evidence.** local evidence: /ai/github/Maya-data/agent-tools/results/sol-fused-gfx11.md; local evidence: /ai/github/Maya-data/agent-tools/results/muse-fused-nimo.md (earlier run)
+**Evidence.** local evidence (earlier run)
 ### E05 - Strata's fused int8 WMMA prompt MoE on discrete cards (OPEN)
 
 **Question.** Does the port of Strata's fused int8 WMMA MoE help the R9700 or RX 7900 XT?
@@ -211,7 +240,7 @@ Decode 17.8 on both; 6/6 long prompts (8-16K) without errors; completions byte-i
 
 **Caveats.** One request per size. Nightly build. The hub's earlier '258-273 tok/s' on 7.2.2 is a different sweep; this entry uses the coordinator's same-prompt comparison.
 
-**Evidence.** hub README.md and NOTES.md; coordinator session notes, 2026-10-08/09; local evidence: /ai/github/Maya-data/agent-tools/results/muse-fused-nimo.md
+**Evidence.** hub README.md and NOTES.md; coordinator session notes, 2026-10-08/09; local evidence
 
 ### E08 - amd_iommu=off on Strix Halo (KEPT)
 
@@ -253,7 +282,7 @@ Decode and expert pool unchanged (80.17 GB, 288 slots per layer). The maintainer
 
 **Caveats.** One request per cell. The PR build also needed a 3-line shim (E32). Maintainer's own #44 tables (V100) show the same direction on one GPU with large chunks.
 
-**Evidence.** [#44](https://github.com/mw00/project-maya/pull/44) (our comment); local evidence: /ai/github/Maya-data/agent-tools/results/muse-nimo-pr41-44.md
+**Evidence.** [#44](https://github.com/mw00/project-maya/pull/44) (our comment); local evidence
 
 ### E10 - Why 256-token prompts are slow (DROPPED)
 
@@ -267,7 +296,7 @@ Decode and expert pool unchanged (80.17 GB, 288 slots per layer). The maintainer
 
 **Caveats.** Source review, no profiler timeline. The per-layer sync cost was not measured.
 
-**Evidence.** local evidence: Maya field-study lead ledger (LEADS.md) / SUPPRESSIONS.md; local evidence: /ai/github/Maya-data/benchmarks/20261008-v1011-2gpu/summary.md
+**Evidence.** local evidence: Maya field-study lead ledger (LEADS.md) / SUPPRESSIONS.md; local evidence
 
 ### E11 - Terminal-layer prefix skip in single-GPU prefill (KEPT-OPEN)
 
@@ -287,7 +316,7 @@ Decode and expert pool unchanged (80.17 GB, 288 slots per layer). The maintainer
 
 **Caveats.** One request per size and mode, so these are observations, not an estimate of a stable speedup. Multi-request output is not promised byte-identical when adaptive expert placement is allowed to change. No NVIDIA build or timing: the skip sits in shared host code and so applies to eligible CUDA single-GPU prefill, but its benefit there is unmeasured. Not measured on two GPUs; split exclusion was checked from the guard and both hop consumers.
 
-**Evidence.** local evidence: /ai/github/Maya-data/agent-tools/results/codex-mgl005.md
+**Evidence.** local evidence
 ### E38 - R9700 prefill sub-batch 1024, 2048 and 4096 (DROPPED)
 
 **Question.** Does a larger prefill sub-batch (1024, 2048 or 4096) speed up prompts on one R9700?
@@ -306,7 +335,7 @@ Decode and expert pool unchanged (80.17 GB, 288 slots per layer). The maintainer
 
 **Caveats.** One sample per cell. The 4096 dips at 8K and 28K are suggestive, not conclusive. In each decode pair the first value is slower (warm-up).
 
-**Evidence.** local evidence: /ai/github/Maya-data/agent-tools/results/muse-r9700-subsweep.md; receipts under /ai/github/Maya-data/agent-tools/results/receipts/ (muse-sub1024, muse-sub2048, muse-sub4096)
+**Evidence.** local evidence; receipts under local evidence (muse-sub1024, muse-sub2048, muse-sub4096)
 
 ## Decode speed
 
@@ -357,7 +386,7 @@ Full-model single-R9700 decode, four measured requests per arm after two warm-up
 
 **Caveats.** The full-model comparison is one pair of four-request arms on one card. The 28.1 tok/s v1.0.16 reference in earlier notes is a measurement artifact (short replies; see E39) and is not used here. gfx1100 dispatch was left unchanged.
 
-**Evidence.** local evidence: /ai/github/Maya-data/agent-tools/results/luna-rdna4-experts.md; local evidence: /ai/github/Maya-data/agent-tools/briefs/luna-rdna4-experts.md
+**Evidence.** local evidence
 ### E14 - CPU expert lane plans (two GPUs) (DROPPED)
 
 **Question.** Is the CPU computing part of the RAM-tier experts a net win, and is the automatic split the best?
@@ -377,7 +406,7 @@ The lane's 13.7 ms/token overlaps GPU work and removes PCIe fetches. Baseline co
 
 **Caveats.** Four requests per arm. PCIe links were at full speed; the idle-link calibration problem (upstream issue 13) does not show here.
 
-**Evidence.** local evidence: Maya field-study lead ledger (LEADS.md) (MG-L004); local evidence: /ai/github/Maya-data/benchmarks/20261008-v1011-2gpu/
+**Evidence.** local evidence: Maya field-study lead ledger (LEADS.md) (MG-L004); local evidence
 
 ### E15 - Shared expert on a second stream (Strix) (DROPPED)
 
@@ -419,7 +448,7 @@ The lane's 13.7 ms/token overlaps GPU work and removes PCIe fetches. Baseline co
 
 **Caveats.** Five requests; no early-abort code was written, the decision is from the profile. The head is busy about half the time; a different split would change this.
 
-**Evidence.** local evidence: Maya field-study lead ledger (LEADS.md) (MG-L001, MG-S002); local evidence: /ai/github/Maya-data/benchmarks/20261008-v1011-2gpu/2gpuprof
+**Evidence.** local evidence: Maya field-study lead ledger (LEADS.md) (MG-L001, MG-S002); local evidence
 
 ### E18 - Single-GPU speculation on Strix Halo (OPEN)
 
@@ -435,7 +464,7 @@ gates, different ON/OFF binaries and incomplete final-test evidence. No default 
 
 **Caveats.** Four prompts, one 300-token continuation each: a feasibility sample, not a workload estimate. The 1.2x verify cost is an assumption, based on a read-sharing hypothesis (about 10.2 GB versus 8.5 GB per step), not a measurement. Long-context acceptance is not measured. The earlier 1.1-1.2x estimate remains unverified.
 
-**Evidence.** local evidence: /ai/github/Maya-data/agent-tools/results/codex-mtp-accept.md; hub ROADMAP.md; local evidence: /ai/github/Maya-data/agent-tools/results/openmose-next.md (section 3)
+**Evidence.** local evidence; hub ROADMAP.md; local evidence (section 3)
 ### E39 - Single-R9700 decode regression on upstream builds (DROPPED)
 
 **Question.** Does single-R9700 decode fall from 28.1 tok/s on v1.0.16 to about 20.5 to 22 tok/s on later upstream builds? (Answer: no; the 28.1 was a short-reply artifact.)
@@ -464,7 +493,7 @@ The earlier 28.1 (v1.0.16) and about 22 (integration) figures in this entry are 
 
 **Caveats.** Three scored requests per arm; the RAM 90 and combined arms are single configurations. The 90 GB reference in E22 (25.5) was not re-run; the controlled RAM 90 arm gives 24.5.
 
-**Evidence.** local evidence: /ai/github/Maya-data/agent-tools/results/sol-r9700-decode-regress.md; local evidence: /ai/github/Maya-data/agent-tools/results/muse-local-integration.md; local evidence: /ai/github/Maya-data/agent-tools/results/luna-rdna4-experts.md; local evidence: /ai/github/Maya-data/agent-tools/results/muse-r9700-subsweep.md; E22 (local evidence: /ai/github/Maya-data/benchmarks/r9700-typical/REPORT.md)
+**Evidence.** local evidence; E22 (local evidence)
 
 ## Expert tiers
 
@@ -489,7 +518,7 @@ Stability (shadow, v1.0.11): 12/12 benchmark requests, 7/7 smoke checks, 20/20 s
 
 **Caveats.** Greedy text diverges between arms (CPU-lane numerics), so quality was compared by coherence only. The v1.0.14 re-measure ended in crashes, so no clean post-promotion A/B exists. The v1.0.10 validation had one 4.5 tok/s outlier (transient CPU-lane slowdown, not reproduced).
 
-**Evidence.** [#15](https://github.com/mw00/project-maya/pull/15); local evidence: /ai/github/Maya-data/benchmarks/20261008-v1011-shadow-ab/summary.md; local evidence: /ai/github/Maya-data/benchmarks/20261008-v1011-2gpu/summary.md; local evidence: /ai/github/Maya-data/benchmarks/20261008-v1010-ram-shadow/validation-summary.json
+**Evidence.** [#15](https://github.com/mw00/project-maya/pull/15); local evidence
 
 ### E20 - RAM-resident tier and PROMOTE_MIN on one R9700 (KEPT)
 
@@ -517,7 +546,7 @@ Stability (shadow, v1.0.11): 12/12 benchmark requests, 7/7 smoke checks, 20/20 s
 
 **Caveats.** Five requests per arm; the RAM tier absorbs the rereads on this 192 GB machine, so SSD-bound setups may differ.
 
-**Evidence.** local evidence: Maya field-study lead ledger (LEADS.md) (MG-L003); local evidence: /ai/github/Maya-data/benchmarks/20261008-v1011-2gpu/2gpulend
+**Evidence.** local evidence: Maya field-study lead ledger (LEADS.md) (MG-L003); local evidence
 
 ### E22 - Low-RAM decode (48 GB) on one R9700 (OPEN)
 
@@ -533,7 +562,7 @@ Stability (shadow, v1.0.11): 12/12 benchmark requests, 7/7 smoke checks, 20/20 s
 
 **Caveats.** Crash on the first attempt, so stability at 48 GB is not established. The 90 GB reference (25.5) and the 3090 references (17.3 / 12.9) are quoted in the report without their own source. Two passes only.
 
-**Evidence.** local evidence: /ai/github/Maya-data/benchmarks/r9700-typical/REPORT.md; local evidence: /ai/github/Maya-data/benchmarks/r9700-typical/b-ram48.jsonl
+**Evidence.** local evidence
 
 ## Two GPUs
 
@@ -549,7 +578,7 @@ Stability (shadow, v1.0.11): 12/12 benchmark requests, 7/7 smoke checks, 20/20 s
 
 **Caveats.** Hub also quotes ~34-36 tok/s from a v1.0.15 local run (not reconciled with 33 from the PR). One machine, one GPU pair.
 
-**Evidence.** [#14](https://github.com/mw00/project-maya/pull/14); local evidence: /ai/github/Maya-data/benchmarks/20261008-v1011-2gpu/summary.md
+**Evidence.** [#14](https://github.com/mw00/project-maya/pull/14); local evidence
 
 ### E24 - Split-point sweep and the automatic split (DROPPED)
 
@@ -567,7 +596,7 @@ Stability (shadow, v1.0.11): 12/12 benchmark requests, 7/7 smoke checks, 20/20 s
 
 **Caveats.** Differences of 0.5-1.5 tok/s are inside run-to-run spread. Prefill +2.5-4.6% at higher splits is from five requests.
 
-**Evidence.** [#14](https://github.com/mw00/project-maya/pull/14); local evidence: Maya field-study lead ledger (LEADS.md); local evidence: /ai/github/Maya-data/benchmarks/20261008-v1011-2gpu/split26; local evidence: /ai/github/Maya-data/benchmarks/20261008-v1011-2gpu/split28
+**Evidence.** [#14](https://github.com/mw00/project-maya/pull/14); local evidence: Maya field-study lead ledger (LEADS.md); local evidence
 
 ### E25 - One hipBLASLt table per architecture on a mixed pair (FIXED)
 
@@ -581,7 +610,7 @@ Stability (shadow, v1.0.11): 12/12 benchmark requests, 7/7 smoke checks, 20/20 s
 
 **Caveats.** No before/after speed number was recorded for the mismatch.
 
-**Evidence.** [#14](https://github.com/mw00/project-maya/pull/14); local evidence: /ai/github/Maya-data/benchmarks/20261008-shadow-budget90/two-gpu-fault-note.md
+**Evidence.** [#14](https://github.com/mw00/project-maya/pull/14); local evidence
 
 ## Strix Halo
 
@@ -611,7 +640,7 @@ Stability (shadow, v1.0.11): 12/12 benchmark requests, 7/7 smoke checks, 20/20 s
 
 **Caveats.** Hog figures are from the coordinator's notes; the logs were lost in a reboot. Receipts only cover 2026-10-09; earlier Strix runs have no host capture.
 
-**Evidence.** coordinator session notes, 2026-10-08/09; local evidence: /ai/github/Maya-data/agent-tools/results/receipts/; local evidence: /ai/github/Maya-data/agent-tools/README.md
+**Evidence.** coordinator session notes, 2026-10-08/09; local evidence
 
 ## Stability
 
@@ -641,7 +670,7 @@ Stability (shadow, v1.0.11): 12/12 benchmark requests, 7/7 smoke checks, 20/20 s
 
 **Caveats.** 'It went away for 80 rounds' was treated as evidence of a cause; it was not. The two-GPU fault note (engine log line 896) points at the conversation-slot transition in the MTP path; it was not isolated with STRATA_GLM_SLOTS=0 in the records read. The fix report did not rerun the historical crashes to say which race caused each.
 
-**Evidence.** [#15](https://github.com/mw00/project-maya/pull/15) (our comment, 2026-10-08); local evidence: /ai/github/Maya-data/benchmarks/20261008-shadow-budget90/two-gpu-fault-note.md; hub NOTES.md ('A correction')
+**Evidence.** [#15](https://github.com/mw00/project-maya/pull/15) (our comment, 2026-10-08); local evidence; hub NOTES.md ('A correction')
 
 ### E30 - Root causes of the illegal memory access, and the fix (#39) (KEPT-OPEN)
 
@@ -662,7 +691,7 @@ Invalid-route injection (all and partial NaN/Inf on primary, predicted, lookahea
 
 **Caveats.** The run did not isolate which race caused each historical crash, nor trace the origin of every NaN; the 'before' counts were supplied, not rerun. Medians include the first request; long-prompt decode is 32 tokens. gfx1151 compiled, not hardware-tested; CUDA not built or run (shared code is exposed too). Default calibration used mixed CPU/GPU lanes and started no background moves; the all-CPU plan was needed to exercise race 2.
 
-**Evidence.** [#39](https://github.com/mw00/project-maya/pull/39); local evidence: /ai/github/Maya-data/agent-tools/results/codex-fix-result.md; local evidence: /ai/github/maya-ramcrash/verification/gpu-crash-final/summary.json; local evidence: /ai/github/Maya-data/agent-tools/results/sol-rebase-38-39.md; local evidence: /ai/github/Maya-data/agent-tools/results/muse-local-integration.md (re-verified on v1.0.23 + #39 + #38, incl. R9700 long-prompt repeats)
+**Evidence.** [#39](https://github.com/mw00/project-maya/pull/39); local evidence (re-verified on v1.0.23 + #39 + #38, incl. R9700 long-prompt repeats)
 
 ### E31 - Rebasing #38 and #39 onto v1.0.21 and v1.0.23 (KEPT-OPEN)
 
@@ -676,7 +705,7 @@ Invalid-route injection (all and partial NaN/Inf on primary, predicted, lookahea
 
 **Caveats.** CUDA was not built or run for this rebase. The earlier R9700 baselines (800/830 prefill, 28.1 decode) do not reproduce under this protocol even for #38 alone, so they are a stale baseline, not a regression. The 28.1 decode was a short-reply artifact (see E39). The R9700 decode level is a separate open question (see E39). Single requests per long-prompt size.
 
-**Evidence.** local evidence: /ai/github/Maya-data/agent-tools/results/sol-rebase-38-39.md; local evidence: /ai/github/Maya-data/agent-tools/results/muse-local-integration.md; [#38](https://github.com/mw00/project-maya/pull/38); [#39](https://github.com/mw00/project-maya/pull/39)
+**Evidence.** local evidence; [#38](https://github.com/mw00/project-maya/pull/38); [#39](https://github.com/mw00/project-maya/pull/39)
 ### E32 - #44 breaks the HIP build (#52) (FIXED)
 
 **Question.** Does upstream v1.0.20/21 with #41 + #44 build and run on AMD?
@@ -689,7 +718,7 @@ Invalid-route injection (all and partial NaN/Inf on primary, predicted, lookahea
 
 **Caveats.** The report on #44 arrived after the merge.
 
-**Evidence.** [#52](https://github.com/mw00/project-maya/pull/52); [#44](https://github.com/mw00/project-maya/pull/44) (our comment); local evidence: /ai/github/Maya-data/agent-tools/results/muse-nimo-pr41-44.md
+**Evidence.** [#52](https://github.com/mw00/project-maya/pull/52); [#44](https://github.com/mw00/project-maya/pull/44) (our comment); local evidence
 
 ## Long context
 
@@ -705,7 +734,7 @@ Invalid-route injection (all and partial NaN/Inf on primary, predicted, lookahea
 
 **Caveats.** One or two requests per size. The RTX 3090 reference is quoted in the report without a source. One of the 32K failures was a planner reject ('planned 1792 of 222488 routed rows'), the others illegal memory access.
 
-**Evidence.** local evidence: /ai/github/Maya-data/benchmarks/r9700-typical/REPORT.md; local evidence: /ai/github/Maya-data/benchmarks/r9700-typical/a-results.json
+**Evidence.** local evidence
 
 ### E34 - KV ring (#41) and 64K context on Strix Halo (KEPT)
 
@@ -719,7 +748,7 @@ Invalid-route injection (all and partial NaN/Inf on primary, predicted, lookahea
 
 **Caveats.** INT8 latent cache was not run. Single pass; R9700 long-prompt repeat not found in the records.
 
-**Evidence.** [#41](https://github.com/mw00/project-maya/pull/41) (our comment); local evidence: /ai/github/Maya-data/agent-tools/results/muse-nimo-pr41-44.md; local evidence: /ai/github/Maya-data/agent-tools/results/receipts/pr4144-before.json
+**Evidence.** [#41](https://github.com/mw00/project-maya/pull/41) (our comment); local evidence
 
 ### E40 - R9700 long-context ladder, 40K to 1M (KEPT)
 
@@ -741,7 +770,7 @@ Invalid-route injection (all and partial NaN/Inf on primary, predicted, lookahea
 
 **Caveats.** Single prompt request per size. RAM_GB 90 needs ~105-111 GB MemAvailable (the box has 186 GB).
 
-**Evidence.** local evidence: /ai/github/Maya-data/agent-tools/results/muse-r9700-longctx.md; local evidence: /ai/github/Maya-data/agent-tools/results/muse-r9700-longctx/ (logs, configs, receipts, harness)
+**Evidence.** local evidence (logs, configs, receipts, harness)
 
 ### E41 - Strix long-context ladder (KEPT)
 
@@ -755,7 +784,7 @@ Invalid-route injection (all and partial NaN/Inf on primary, predicted, lookahea
 
 **Caveats.** One request per cell and one recall pass, no confidence interval. Reply texts were not preserved for independent recall rescoring. Capacity is not continuous residency: the raw 262K log reports 11260/12096 experts resident after the ~120K prompt and 1.26 disk reads/token during that decode, because prompt lending evicts experts. Reserving a larger window is distinct from filling it. The everyday config is temporarily replaced during the two-row job, which must restore it.
 
-**Evidence.** /ai/github/Maya-data/agent-tools/results/muse-nimo-longctx.md (final, audited); /ai/github/Maya-data/agent-tools/results/muse-nimo-next262k-before.json and -after.json; preserved config/engine/server logs in /ai/github/Maya-data/agent-tools/results/muse-nimo-longctx-evidence/
+**Evidence.** local evidence (long-context report, final and audited), before/after receipts, and preserved config/engine/server logs.
 
 ## Quality
 
@@ -777,7 +806,7 @@ Invalid-route injection (all and partial NaN/Inf on primary, predicted, lookahea
 
 **Question.** Why does every OpenAI `tools` request fail with HTTP 400 "malformed tool call"?
 
-**Setup.** Single R9700, Maya-S; 12 tool cases in /ai/github/Maya-data/eval/tools_cases.json run against serve/ from the old `amd/glm-gfx1100` checkout (v1.0.15-era) vs serve/ from upstream main (v1.0.26).
+**Setup.** Single R9700, Maya-S; 12 tool cases in local evidence run against serve/ from the old `amd/glm-gfx1100` checkout (v1.0.15-era) vs serve/ from upstream main (v1.0.26).
 
 **Result.** Not a parser bug in upstream: the old serve/ only parsed Qwen's `<function=...>` form, so every GLM `NAME<arg_key>..` body was rejected. Stale serve/: 2/12; current serve/: 11/12 (the one miss is the model also calling web_search, not a parse error). Exact raw body captured and pinned in a unit test (`serve/test_tools.py`, 23 tests pass).
 
@@ -785,7 +814,7 @@ Invalid-route injection (all and partial NaN/Inf on primary, predicted, lookahea
 
 **Caveats.** The 11/12 is one 12-case run. The old checkout's serve/ itself was left untouched (it is the user's branch).
 
-**Evidence.** local evidence: /ai/github/Maya-data/agent-tools/results/sonnet-toolcall-fix.md; local evidence: /ai/github/Maya-data/eval/results-smoke/tools.jsonl
+**Evidence.** local evidence
 
 ### E44 - NIAH recall garbles exact digits (OPEN)
 
@@ -799,7 +828,7 @@ Invalid-route injection (all and partial NaN/Inf on primary, predicted, lookahea
 
 **Caveats.** Single run per length; one reply rescored HIT->MISS on a substring-scorer false positive ("44817" contains "4481" but the needle was 4817).
 
-**Evidence.** local evidence: /ai/github/Maya-data/agent-tools/results/muse-r9700-longctx.md
+**Evidence.** local evidence
 
 ## Comparisons with other projects
 
@@ -815,7 +844,7 @@ Invalid-route injection (all and partial NaN/Inf on primary, predicted, lookahea
 
 **Caveats.** All numbers are theirs, on different hardware, model quant and engine; not comparable to Maya's. The report marks several points UNVERIFIED (e.g. single-card acceptance, RDNA4 builtin variant). Includes their negative results (lookahead prefetch slower; MMQ column-tile tuning spills on wave32).
 
-**Evidence.** local evidence: /ai/github/Maya-data/agent-tools/results/openmose-next.md; local evidence: /ai/github/Maya-data/agent-tools/results/openmose-readme.md; coordinator session notes, 2026-10-08/09
+**Evidence.** local evidence; coordinator session notes, 2026-10-08/09
 
 ### E37 - Other engines: halogen-flash-server and glm53-flash-offload (OPEN)
 
@@ -1011,7 +1040,9 @@ not saved. Three samples, one order, no CI; no gfx1100/gfx1201/CUDA execution,
 long-context/quality rerun, hip_intrinsics build or speculation validation.
 
 **Decision/restoration.** Keep the locally validated gfx1151 fix for PR preparation,
-not a new default or upstream merge. Fresh independent receipt/live checks
+not a new default or upstream merge. It was later opened upstream as
+[#98](https://github.com/mw00/project-maya/pull/98); the v1.0.32 rebase is
+[E71](#e71---strix-v1032-rebase-and-pr-98-fused-prompt-moe-kept-open). Fresh independent receipt/live checks
 verify maya-nimo-256k.json262144/v1.0.24, original configfb3b0737…,
 engine99b0279c… and table2cd69361…; engine219105 is sole GPU owner.
 Only owned orphan launch shell219100 was closed to release stuck SSH;
@@ -1022,6 +1053,427 @@ finished; no GPU job queued behind them and no code push/PR/comment.
 receipt/config/build logs, audit.py, independent-audit-20261009.json,
 audit-evidence-hashes-20261009.json, audit-restored-20261009.json and preserved
 producer report/profile/harness/CMakeCache files. Evidence class D.
+
+## Later records (E49-E69)
+
+E49-E69 consolidate the current working records: source reviews, CPU/build preparation and a few synthetic GPU runs.
+Unless an entry says otherwise, the work was source-, CPU- or build-only, and "KEPT" means the record was retained,
+not that the mechanism was adopted. Evidence is local unless a public link is given.
+
+### E49 - Strix existing cold-prefix phase profile audited (KEPT)
+
+**Question.** Where does Strix prefill time actually go, and does profiling change it?
+
+**Setup.** Strix Halo (gfx1151, 128 GB unified), v1.0.24, 262144 context; ~8.1K / ~32.2K-token prompts, 32-token
+outputs, cache 0, one request per cell.
+
+**Result.** Profiled 351.0 / 339.4 tok/s at ~8.1K / ~32.2K; non-profile 8K was 347.6. One sample per cell, so no
+profiler overhead or speedup is claimed. Event-interval shares: fused MoE 32.7/30.6%, DSA attention 17.9/19.8%, KDA
+projections 17.8/19.0%, DSA projections 6.7/8.7%.
+
+**Decision.** Kept as a diagnostic. Prompt work should target the math, not I/O.
+
+**Caveats.** Event intervals are not pure kernel shares: expert intervals include staging waits and combine flushes,
+and host disk waits overlap other work.
+
+### E50 - Rotating CPU calibration preparation (OPEN)
+
+**Question.** Does an opt-in rotating CPU calibration patch (the upstream issue #70 idea) prepare safely?
+
+**Setup.** Isolated v1.0.23 patch, opt-in `STRATA_GLM_CPU_CAL_ROTATE=1`, default off; CPU-only checks.
+
+**Result.** 256-call helper/sanitizer/CTest checks and 22 hashes pass; baseline equivalence holds. Leak checking was
+disabled under ptrace. HIP/native quant parity, the real working set and paired full-256-token R9700 throughput were
+not tested.
+
+**Decision.** OPEN, CPU preparation only. No production integration or measured speedup.
+
+**Caveats.** Literal upstream diff provenance unverified.
+
+### E51 - GLM prefill applicability and selector oracle (OPEN)
+
+**Question.** Do other engines' dense-fusion and selector mechanisms port to GLM prefill?
+
+**Setup.** Pinned public source; CPU oracle regenerated (423 DSA helper cases, 795 wrapper, 6 oracle NaN rejections,
+49 QSA comparisons, 29 fixtures).
+
+**Result.** Direct Qwen selector/combine/SwiGLU ports do not match GLM's ordering, tail, clamping and HC contracts.
+GLM already has exact linear radix selection and Q8/K-quant vector stores; IQ4_XS is conditional on the deployed
+formats. Gufo bounded attention carry and packed routed 16-bit tiles remain source-only.
+
+**Decision.** OPEN. Direct Qwen selector/store ports rejected; no measured AMD gain.
+
+**Caveats.** CPU contract agreement is not GPU arithmetic/concurrency parity.
+
+### E52 - IQ2_XXS BF16 WMMA preparation (OPEN)
+
+**Question.** Can a BF16 WMMA IQ2_XXS gate/up kernel be prepared for gfx1151?
+
+**Setup.** Benchmark-only single-expert kernel, K4096/M2048/N1..256, BF16 tiles, FP32 accumulate; serial gfx1151
+compile.
+
+**Result.** 391,680 rounding cases, 1,024 complete blocks, 16,777,216 decoder values, tail/layout checks and 87 hash
+entries pass. Resource metadata: LDS 6656, VGPR 86, spills 0. No GPU run.
+
+**Decision.** OPEN, CPU/compile preparation only. The measured successors E57/E60 lose to native INT8.
+
+**Caveats.** Resource metadata is not measured occupancy/throughput; the candidate redecodes each 16-row tile.
+
+### E53 - Strix Halogen/CIRU/Gufo applicability audit (OPEN)
+
+**Question.** Which techniques from other Strix engines transfer to Maya?
+
+**Setup.** Read-only reports; no weights or reference executables run.
+
+**Result (theirs, not rerun).** Halogen 1502/1499 prefill tok/s at 8K/32K. CIRU 1251.39 tok/s at 64K (repeat 1267.40)
+and 1002.96 at 256K, generating one token. Gufo 1700.52 fresh pp2048; 25.95 autoregressive decode, 31.32 mixed MTP,
+60.39 repetitive MTP; its cached 128K row is about 2048 appended tokens, not cold 128K prefill.
+
+**Decision.** Conditional leads only: packed routed 16-bit WMMA tiles, shape-selective dense projections, bounded
+sparse-attention carry. Gufo F16 is not BF16; CIRU GDN is not GLM KDA.
+
+**Caveats.** Different model, quant, active computation and protocol; no attainable GLM speed factor follows.
+
+### E54 - R9700 health and table-gap lead audit (OPEN)
+
+**Question.** Did the local control drift, and which table leads remain?
+
+**Setup.** Read-only snapshot, v1.0.23 integration, 131072 context, INT8, RAM 90 GB.
+
+**Result.** Config, engine and table hashes unchanged. The table has 40 Lt rows covering 64-1024 tokens and no 2048
+bucket; nearest-1024 reuse still needs an independent resolver/dispatch check.
+
+**Decision.** OPEN. Missing-2048 tuning, an admission sweep and speculation qualification remain future gated work.
+
+**Caveats.** Historical receipt equality is not current live-state or exclusive-ownership proof.
+
+### E55 - S-v2/M/L quant recipe inventory (OPEN)
+
+**Question.** What is in the S/M/L quants, and are M/L measured?
+
+**Result.** Documented in [QUANTS.md](QUANTS.md): sizes 96.5/116.0/156.3 GB; S/M/L gate-up IQ2_XXS/IQ2_S/IQ3_S;
+ordinary down IQ2_S/IQ3_XXS/IQ4_XS; first/last four down IQ3_XXS/IQ3_S/Q5_K. The conversational ~21 tok/s M and
+~15.5 tok/s L figures were inverse-file-size estimates, not measurements.
+
+**Decision.** OPEN. No M/L download, speed or quality experiment.
+
+**Caveats.** File size is not runtime-pack size; M/L cannot reuse S's 90 GB tier blindly.
+
+### E56 - Maya/Strata PR acceptance and applicability audit (OPEN)
+
+**Result.** Public metadata confirms Maya #38/#39/#61 merged on 2026-10-09 in v1.0.27. At the pinned Strata #1749
+head, the HIP VMM resolver is enclosed by a guard excluded in supported HIP builds (static source only). Strata
+#1752 recovery is not a healthy-server 10x claim; Maya already uses `O_DIRECT`. Maya #73 Windows numbers are not
+Linux/AMD evidence.
+
+**Decision.** OPEN. Merge acceptance recorded; no gains counted twice and no live control upgraded.
+
+**Caveats.** Static source only; current PR states were not re-fetched.
+
+### E57 - Strix CIRU-inspired BF16 GPU validation (DROPPED)
+
+**Question.** Does the simple BF16 gate/up prototype beat native INT8 on gfx1151?
+
+**Setup.** One synthetic GPU run, K4096/M2048, N1..256, five warmups and 20 repeats.
+
+**Result.** BF16 cost 10.92-17.96x native INT8 by row; N64 2.290 vs 0.133 ms; N256 6.889 vs 0.383 ms. Nine sizes pass
+the numerical/finite gates.
+
+**Decision.** DROPPED for this one-wave prototype (redecode per 16-token tile, two projection launches), not for all
+CIRU-inspired designs.
+
+**Caveats.** Synthetic projection adapter, not fused/down/model quality; event spans include host and launch gaps.
+
+### E58 - R9700 Lt2048 and calibration follow-up (OPEN)
+
+**Question.** Is the missing 2048-token hipBLASLt bucket a real R9700 gap?
+
+**Setup.** CPU/source audit of the production resolver; dedicated Lt driver built (compile/link only).
+
+**Result.** The table has 40 rows, buckets 64/128/256/512/1024; T2048 maps to the nearest 1024/512/128 by shape.
+66 manifest entries, 12 shapes x 5 lengths and calibration helpers pass on CPU. GPU support, parity and speed are
+untested. GLM uses a 16 MiB workspace vs the tuner default 32 MiB; a row must beat hipBLAS by >=2% to be kept.
+
+**Decision.** OPEN, build-only. Tune at 2048 only after exclusive GPU admission, same-binary table-only A/B.
+
+**Caveats.** No measured R9700 gain; only the nearest solution was tried.
+
+### E59 - BF16 grouped64 and cleaned timing preparation (KEPT)
+
+**Question.** Can the BF16 v2 grouped decoder be prepared and verified on CPU?
+
+**Result.** 591,872 blocks / 151,519,232 decoded values match the oracle bitwise; all 65,536 half scales, 524,288
+code/sign/subscale blocks and 393,216 rounding boundaries are checked. ASan/UBSan pass on 69,632 blocks (leak checking
+disabled under ptrace). 28 kernel hashes match before/after.
+
+**Decision.** KEPT as CPU preparation, not production adoption. The GPU gates completed in E60.
+
+**Caveats.** LDS 16000 is source accounting, not compiled resource or occupancy.
+
+### E60 - BF16 v2 GPU qualification: native INT8 still wins (DROPPED)
+
+**Question.** Does grouped64 BF16 v2 beat native INT8 on gfx1151?
+
+**Setup.** One synthetic run, same binary, three balanced cyclic orders, five warmups and 20 repeats.
+
+**Result.** v2 is 4.02-7.45x faster than clean-v1 BF16, but X+gate/up still costs 2.26-3.25x native INT8. N256 medians:
+v1 6.89077 ms, v2 0.997555 ms, native 0.381516 ms. All nine N cases pass the parity/guard gates.
+
+**Decision.** DROPPED. Keep native INT8; retain the prototype gain as research evidence.
+
+**Caveats.** Single-buffer synthetic expert gate/up only; no actual weights, down/fusion or full-model quality.
+
+### E61 - Public prefill commit methodology and tracking baseline (KEPT)
+
+**Question.** What reusable prefill method and cross-engine baseline can be extracted from public work?
+
+**Result.** One public-only worker checked three pinned HEADs, 26 commit objects and eight pivotal parent diffs. The
+reusable method: define the numeric/state contract, profile the whole workload, pick one mechanism, build an
+oracle-backed reproducer, inspect dispatch and VGPR/LDS/scratch, change one thing, alternate matched runs, then require
+an end-to-end gain. Author results (theirs, not ours): Gufo `98641a6` reports +5.1% Qwen pp2048 from a
+compiler-conditioned spill fix; Strata `a45783c` reports +31.9% on a 7900 XTX from missing small-T shapes, while
+`3512797` reports ~0.8% whole-prompt despite 1.15x GEMM on R9700.
+
+**Decision.** KEPT as methodology and a tracking baseline. No direct GLM port; no repeat of rejected tests.
+
+**Caveats.** Author numbers were not rerun; the worker scan had date/precision errors, corrected by the coordinator.
+
+### E62 - Radiance R9700 prefill methodology (KEPT)
+
+**Question.** Which prefill methods in the public Radiance forks apply to a single R9700?
+
+**Result.** Source-only audit of magiccodingman/vllm-radiance (six focused diffs, 22 hashes). Method notes: separate
+decode/prefill shape policies, one-time FP8 preshuffle, avoid physical activation-scale transposes, collect actual
+GEMM signatures then tune offline. Single-card correction: GGZ14/vllm-mxfp4 has a TP1 profile (author ~2.5-2.8K
+prefill tok/s at 210 W; actual 47,014-token prompt 2480); SlyBase/vllm-sly-radiance explicitly targets one R9700 at
+262144 context (author 3132/3136/3105/2949/2635 tok/s at 1.5K/6K/12K/24K/47K). These are author measurements, not our
+tests and not a 128K claim.
+
+**Decision.** KEPT as methodology. Paged attention is not MLA/DSA; FP8/MXFP4 is not IQ2.
+
+**Caveats.** Sly kernel internals unaudited; different model and quant.
+
+### E63 - Single-card Radiance dispatch and native IQ packing leads (KEPT)
+
+**Question.** Are the single-card dispatch and packing ideas applicable?
+
+**Setup.** CPU-only workers, independently audited.
+
+**Result.** 23 worker + 28 Radiance + 12 Maya hashes and six parent diffs pass; 13 native IQ CPU tests cover 77
+geometry cases; the default-off packed-X patch applies in check-only mode (quantizes X once/token, gathers 144-byte D4
+blocks into existing scratch). Radiance's installed path supports conditional load-storage reuse and unsharded shape
+dispatch. Illustrative T2048/R8T traffic 328 -> 185 MiB is not timing.
+
+**Decision.** KEPT as CPU preparation, not a production patch. Halo's native fused path already reuses X, so this
+targets the discrete MMQ fallback.
+
+**Caveats.** No GPU numeric parity or matched whole-chain timing; external library internals unverified.
+
+### E64 - XeStrata technique and commit audit (KEPT)
+
+**Result.** Release and HEAD pinned. 117 manifest entries, 46 files vs Git, 21 parent diffs and 136/72/1 first-parent
+intervals verified. A source-only conditional lead map; author Qwen/discrete AMD/Intel rates are not Maya gains, and
+the APU implementation is explicitly untested in the release notes.
+
+**Decision.** KEPT. No GPU, quality or performance gate follows.
+
+### E65 - R9700 dispatch/parity and matched component timing (KEPT)
+
+**Question.** Does the one-row hipBLASLt filter help at actual shapes?
+
+**Setup.** Three synthetic GPU invocations (baseline, matched timing, one-row filter); 131072 context, 16 MiB
+workspace, ROCm 7.2.1 / Lt 100202.
+
+**Result.** All 66 actual-shape gates pass; 26 nonzero cases at T2048/37, 1,040 raw samples, balanced AB/BA rounds.
+14 cells beat hipBLAS by >=2%, 8 lose by >=2%, 4 are near equal. The narrow loser is the dense-down second slice
+N1366/K12288: at T2048 Lt 0.995 ms vs hipBLAS 0.663 ms, about 33.4%/32.0% of that synthetic operation (not of
+prefill). The one-row-filter candidate passes all 66 gates (61 Lt, 5 intentional fallback).
+
+**Decision.** KEPT as diagnostic and parity evidence. The model A/B followed as E66.
+
+**Caveats.** Synthetic FP16, not IQ expert weights or whole-prefill throughput.
+
+### E66 - Same-engine filtered-table model prefill A/B (DROPPED)
+
+**Question.** Does removing the one losing row improve model prefill?
+
+**Setup.** Original vs filtered table, same engine/model/quant/runtime, 131072 context, ABBA four fresh arms at
+~8K/~32K, eight requests each, full 32-token replies, cache 0.
+
+**Result.** A/B medians 787.3/784.5 and 799.65/798.0 tok/s: -0.36% / -0.21%. No model-level benefit.
+
+**Decision.** DROPPED. Keep the original table.
+
+**Caveats.** Two samples per arm/size and drift; no quality-equivalence claim.
+
+### E67 - Two-PC validation and refinement queue (OPEN)
+
+**Result.** A finite gated queue across Strix Halo and R9700 source/CPU preparation, one GPU job per host. Packed
+activation reuse (H1) failed its first gfx1151 device run after 48/525 packed cases (byte mismatch); the follow-up was
+stopped. A Halo raw-half cache (H2) compiled but is on static hold: the ON build also changed an unintended IQ4_XS
+sibling and no gain was measured. The R9700 2048-token Lt work (N2) passed 66 geometry cases and CPU/source checks,
+but its backend stayed uncompiled/unlinked with a trusted loader/runner missing. No new GPU/model run or measured gain;
+the original servers were restored.
+
+**Decision.** OPEN. Do not repeat a failed candidate without a new sealed version.
+
+**Caveats.** Source/CPU completion is not GPU readiness; many server observations are dated, not fresh ownership.
+
+### E68 - Public ROCmFPX long-context claim audit (KEPT)
+
+**Question.** Is the author's 8.84% Gorgon / custom-3.66BPW / 128K claim applicable to Maya?
+
+**Result.** Source-only audit. The claim is external, with unresolved revision, backend, actual-length and quality
+provenance; a located public 3.84BPW Vulkan card is not the same proof. Five conditional source leads were recorded
+(row-locality, few-row projection dispatch, producer fusion, contiguity, routed tiles); none is a demonstrated Maya
+bottleneck.
+
+**Decision.** KEPT as a source audit. No port or new GPU task follows.
+
+**Caveats.** No locally measured gain.
+
+### E69 - Documentation consolidation (KEPT)
+
+**Result.** A public-only documentation pass audited 48 public experiment IDs/output hashes and merged 69 current
+IDs/statuses into consolidated index and roadmap views. 39 draft mechanisms were not admitted as 39 new jobs;
+negatives and provenance limits were retained.
+
+**Decision.** KEPT. Documentation only; no speed result and no publication authority inferred.
+
+## 2026-10-10 v1.0.32 results (E70-E77)
+
+These entries record the measurements behind the current README table and the efficiency section. The controls are a
+single R9700 at 128K INT8 (RAM tier 90 GB, reserve 1024 MB) and Strix Halo at 262144 FP16.
+
+### E70 - Single R9700 everyday server on upstream v1.0.32 (KEPT)
+
+**Question.** Do the single-R9700 everyday numbers survive the v1.0.32 merges (#38, #39, #52, #61)?
+
+**Setup.** Upstream v1.0.32 (origin/main `2908669`), ROCm 7.2.1, R9700 (gfx1201), 131072 context, INT8 latents, RAM
+tier 90 GB, reserve 1024 MB, PROMOTE_MIN 6, Maya-S v2. HIP release with MMQ/native experts/tests on.
+
+**Result.** 130 serve unit tests pass (3 skipped); model test worst relative error 3.10e-06; layer parity passes on
+gfx1100 and gfx1201. Decode 24.8 tok/s (v1.0.23 was ~25.1). Prefill 799.1 tok/s at 8,075 tokens and 796.4 at 32,269
+(previous ~782/~784). Five 256-token replies all reached 256 tokens. The tools eval is 11/12; the miss is an extra
+`web_search`, the same model behavior as before.
+
+**Decision.** KEPT. The v1.0.32 everyday server is left running.
+
+**Caveats.** Single runs of small samples; decode is ~1% below v1.0.23, inside run-to-run noise.
+
+### E71 - Strix v1.0.32 rebase and PR #98 fused prompt MoE (KEPT-OPEN)
+
+**Question.** Does the gfx1151 fused prompt-MoE + SwiGLU clamp still win on v1.0.32?
+
+**Setup.** Strix Halo (gfx1151), v1.0.32 (`2908669`), TheRock ROCm 10.2, `amd_iommu=off`, 262144 context; fused vs
+MMQ-off in the same binary, two runs per size.
+
+**Result.** ~4K 339.6/336.9 fused vs 299.3/296.6 = +13.5%; ~8K 344.5/343.9 vs 318.0/318.7 = +8.1%; ~16K 333.7/340.8 vs
+323.6/318.9 = +5.0%. Opened upstream as [#98](https://github.com/mw00/project-maya/pull/98).
+
+**Decision.** KEPT-OPEN, pending upstream review.
+
+**Caveats.** Small sequential samples; other architectures untested; quality equivalence not claimed.
+
+### E72 - Two-row single-GPU speculation on Strix, v1.0.32 rebase (OPEN)
+
+**Question.** Does the two-row verify still pay after the v1.0.32 rebase?
+
+**Setup.** Strix Halo (gfx1151), branch `perf/two-row-decode-1gpu-spec` (`e7463ad`), four prompts x 300 greedy
+tokens, a fresh server per request, ON vs OFF.
+
+**Result.** chat 21.3 vs 18.8 (+13.3%), code 22.6 vs 18.8 (+20.2%), reasoning 22.7 vs 18.8 (+20.7%), prose 19.5 vs
+18.6 (+4.8%); token streams identical (ndiff 0). Draft/accepted: 174/126, 166/134, 165/134, 190/109.
+
+**Decision.** OPEN. Unmerged and not the everyday configuration.
+
+**Caveats.** Token identity holds per fresh session; back-to-back prompts drift through the usage profile. The opt-in
+`GEMV2_PERF_GATE` fails ~1.40 vs 1.25 on microsecond-scale shapes, while real GLM shapes are ~1.00-1.03 (1.10 for
+IQ2_XXS). Overlaps upstream #76/#96.
+
+### E73 - Upstream #96 single-GPU MTP on R9700 (OPEN)
+
+**Question.** Does upstream's single-GPU MTP help a lone R9700?
+
+**Setup.** v1.0.32, Maya-S, 128K INT8, five 256-token greedy replies, median of the last three.
+
+**Result.** The gate keeps it off: setup reports "CUDA0 VRAM holds ~28% of the experts", below the one-third gate;
+at 8192 context it is still ~29% (83 slots/layer). Natural-on equals no-spec. Forced (`STRATA_GLM_MTP_DRAFT=3`): chat
+27.0 (+5.5%), code 24.9 (+3.3%), reasoning 29.5 (+12.6%), prose 24.8 (-4.6%); acceptance 73.8/81.5/85.3/58.1%, 1.6-2.7
+tokens/round. Cost: a 173 MB block, pool 80 -> 77 slots/layer (3360 -> 3311; RAM tier 63.65 -> 66.29 GB). A
+layout-matched control shows 0/-3.7/-2.3/-1.5%, so the block's slot/read cost lands on code and prose. Prefill is
+effectively unchanged (~794 vs 793 natural, 781 forced at 8K).
+
+**Decision.** OPEN. The gate makes this not applicable to a single R9700 today; forced gains are per-prompt-type and
+need a gate decision. Posted on upstream [#96](https://github.com/mw00/project-maya/pull/96).
+
+**Caveats.** The forced arm changes memory layout; separate engine launches already vary greedy text.
+
+### E74 - Upstream #95 RDNA GEMV on RX 7900 XT (KEPT-OPEN)
+
+**Question.** Does the RDNA GEMV path help RDNA3 decode?
+
+**Setup.** RX 7900 XT, 32K INT8, five 256-token greedy replies, median of the last three.
+
+**Result.** Mean decode 20.1 -> 20.3 tok/s (+1.1%): chat +1.9%, code +1.1%, reasoning +1.0%, prose +0.5%. Prefill
+unchanged (338-346 tok/s). `glm_mv_parity` passes 333/333 bit-exact (max_abs 0).
+
+**Decision.** KEPT-OPEN as a measurement on upstream [#95](https://github.com/mw00/project-maya/pull/95); worth
+enabling on gfx11.
+
+**Caveats.** Small samples; the bit-exact parity is the strong evidence, not cross-launch text.
+
+### E75 - R9700 prefill profile: compute-bound, transfers hidden (KEPT)
+
+**Question.** Is single-R9700 prefill limited by transfers or by compute?
+
+**Setup.** v1.0.32, gfx1201, 131072 context, INT8 KV, RAM tier 90 GB, prompts ~8.1K / ~32.2K, PREFILL_SUB 2048,
+cache 0. Profile runs match the 799.1/796.4 baseline.
+
+**Result.** The copy lane is under 30% busy; the last staged copy lands 1-2 ms before the layer ends and prestage
+starts 60-670 ms early. All 12,096 experts fit in VRAM+RAM (zero disk waits); RAM_GB 120 is a no-op. Phase shares
+(8K/32K): DSA attention 20.7/22.7%, KDA projections 19.1/18.5%, MoE total 28.4/26.9%, the rest dense projections and
+glue. Achieved GEMM throughput: MoE routed 48.9-58.0 TFLOPS, dense FFN 81.2-83.0, shared 88.6-93.5, about 17% of the
+corrected FP16 peak. Chunk 13312 -> 32768 tokens at 32K cut total H2D copies 193 -> 67 GB and gained +4.1% (792.6 ->
+824.4 tok/s).
+
+**Decision.** KEPT. There is no gfx1201 fused prompt-MoE path in v1.0.32 (the fused path is the gfx1151 #98); ranked
+levers are attention/dense projections, then MoE grouping plus a bigger chunk.
+
+**Caveats.** One profile; phase intervals are not pure kernel time; the chunk measurement is single-run.
+
+### E76 - R9700 GEMM efficiency audit (DROPPED)
+
+**Question.** How much is left in hipBLASLt GEMM selection on R9700 prefill?
+
+**Setup.** v1.0.32, gfx1201 at 2350 MHz, 64 CUs. Measured peak FP16 154 TFLOPS (best measured 138, 90%); INT8/FP8
+about 308 TOPS.
+
+**Result.** Prompt projections average ~101 TFLOPS = 66% of FP16 peak, but GEMMs are only ~11.4% of prefill wall time
+(0.142 of 1.251 ms/token). Re-picking the best testable GEMM is +1.0%; flooring all at >=60% is +1.4%; a floor of 85%
+is +2.6%; a perfect table is +3.9%. The worst shape is KDA attention-out N=4096/K=8192 at 35% of peak. FP8 E4M3
+reaches ~316 TFLOPS (~2x FP16) but needs a pack/dequant path.
+
+**Decision.** DROPPED (parked, not disproven). Reopen if the GEMM share rises above ~20%, a pack allows FP8
+projections, or a new ROCm/hipBLASLt arrives.
+
+**Caveats.** Synthetic GEMM shapes, not IQ expert weights; the peak is a clock/vendor calculation.
+
+### E77 - Strix prefill disk/tier-stall hypothesis closed (DROPPED)
+
+**Question.** Do Strix Halo prefill stalls come from disk/tier borrowing?
+
+**Setup.** Strix v1.0.32 + PR #98, 262144 context, `--prefill 32768`, PREFILL_MB 12288, SUB 4096, a fresh server per
+request; 11 arms.
+
+**Result.** Baseline 32K 340.6 tok/s with 10.4-14.0% host disk wait, 791-806 disk experts and 1,148-1,149 reads. None
+of the 11 arms beat baseline: LAND=96 336.8, RAM_GB=4 338.0, RAM_GB=8 335.4, RAM_GB=12 328.1, PREFILL_MB=2048 307.7,
+`--prefill 16384` 333.9, LEND_PCT=50 338.9, PREFILL_SUB=1024 323.7. Overlap proof: RAM_GB=8 copies 15 ms vs baseline
+25,581 ms, and the compute-stream layer end is within 0.3 s. Decode at 8K: baseline 16.9 vs RAM_GB=8 17.5.
+
+**Decision.** DROPPED. Strix prefill is compute-bound; the disk/tier-stall hypothesis is closed. No code change.
+
+**Caveats.** One request per arm/cell; dated server state.
 
 ## Lessons
 
