@@ -86,6 +86,19 @@ prevent a quality-equivalence claim. Everyday 262K server restored; the fix is
 now open upstream as [#98](https://github.com/mw00/project-maya/pull/98).
 See [E48](EXPERIMENTS.md#e48---gfx1151-fused-moe-on-v1026-kept).
 
+> **What's new on Strix Halo (2026-10-11 to 2026-10-13, E100-E137).** BIOS `Performance` mode lifts the 85 W package
+> cap to ~140 W: prefill +8.3/+10.7/+9.9% at 8K/32K/64K, decode flat (E116); the OS power profile does nothing (E103).
+> `iommu=pt` (needed for the NPU) costs ~7-8% prefill (E117), but a PerfOpt kernel (`7.3.0-rc6-perfopt+`) recovers it
+> fully (~32K 390.25, ~64K 378.25 tok/s, decode flat, E123) and a 71-minute GPU + NPU soak was stable (E125). The
+> multi-digit "digit-split" output seen in that soak was root-caused to a stale Python serve layer that ignored the
+> pack's GLM tokenizer pattern, not the kernel, NPU or MTP, and is fixed (E126-E128). Config pair `PREFILL_SUB 8192`
+> / `PREFILL_MB 24576` + retuned table: +2.6-3.8% prompt (E114). NPU viability line: draft-head offload NO-GO (E129),
+> zero-copy/async mechanism works but costs the GPU -3.7% at 50% duty (E130), the open compiler is ~35% behind gufo's
+> shipped kernel (E131), DSA indexer NO-GO (<10% share, E132), and the KDA q/k/v NPU split is marginal
+> (+0.1% at 32K / +1.7% at 64K once tuned) and parked (E133-E134). Upstream: #98/#113 rebased and parity-checked on
+> gfx1151, #143 NaN guard rebased onto #146; the dual-card prefill chunk cap stays 8192 (E124). The Strix everyday
+> boot flag above (`amd_iommu=off`) is the pre-PerfOpt setting.
+
 ## Where the time goes (theoretical vs actual)
 
 A public summary of the efficiency audits. Estimates are labelled; everything else is a measurement on our machines.

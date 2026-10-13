@@ -27,24 +27,33 @@ RX 7900 XT come second.
 
 ## Next
 
-- **Power-mode A/B on Strix.** The stock "balanced" mode runs 2.47 GHz at 85 W; the measured prefill ceiling scales
-  with the clock, so test the power/clock modes before more kernel work (E94).
-- **Small-wins bundle.** The sub-gate levers are individually below the e2e gate but stack: `PREFILL_SUB=8192` +
+- **Done: power-mode A/B on Strix.** The stock "balanced" mode runs 2.47 GHz at 85 W; the measured prefill ceiling scales
+  with the clock, so test the power/clock modes before more kernel work (E94). Result: the OS profile changes nothing (E103), the BIOS `Performance` mode lifts the cap to ~140 W for +8-11% prefill (E116), and a held 2000 MHz fabric clock adds a further ~+2% (E118).
+- **Done: small-wins bundle.** The sub-gate levers are individually below the e2e gate but stack: `PREFILL_SUB=8192` +
   `PREFILL_MB=24576` (+1.7% at 32K), the retuned hipBLASLt table (+0.8% at 32K) and the MMQ chunk-fastest quant
-  order (+0.6–0.8% on the fallback path). Combine them and re-measure the bundle (E94, E96, E99).
-- **Fused-tile sweep and DFlash2 on Strix.** Retune the fused prompt MoE tiles (E94, E97) and take the next
-  draft/verify change after the verify-fuse work (E91, E92).
-- **DSA rows.** Work the DSA indexer and projections, the remaining context-dependent prefill growth
-  (`glm_dsa_select` is O(n_vis²)); the ROCmFPX map found no transferable GLM DSA patch (E93, E94).
-- **Maya-M and trunk keep under the new quality gate.** Re-run the PR #103 trunk-keep decision (E95: +6–16% decode
+  order (+0.6–0.8% on the fallback path). Combine them and re-measure the bundle (E94, E96, E99). Result: the config pair is adopted (+2.6-3.8% prompt, E114); the code merges and the fused tiles v5 add nothing measurable (E102, E115, E121).
+- **Done: fused-tile sweep and DFlash2 on Strix.** Retune the fused prompt MoE tiles (E94, E97) and take the next
+  draft/verify change after the verify-fuse work (E91, E92). Result: both closed-no-gain (E115, E104).
+- **Done: DSA rows.** Work the DSA indexer and projections, the remaining context-dependent prefill growth
+  (`glm_dsa_select` is O(n_vis²)); the ROCmFPX map found no transferable GLM DSA patch (E93, E94). Result: the exact batched rows path is byte-identical but slower (E106).
+- **Done: Maya-M and trunk keep under the new quality gate.** Re-run the PR #103 trunk-keep decision (E95: +6–16% decode
   on R9700 but KL 0.025–0.062) and Maya-M vs Maya-S against the paired quality suite below, not the old
-  "KL <= 0.02" (E98).
+  "KL <= 0.02" (E98). Result: Maya-M + the stronger keep map passes Gates A and B on one R9700 (E105) and is the dual-card config (E110).
 - **Paired 224-case quality suite.** 64 development + 160 locked confirmation cases (40 tools, 40 coding+instruction,
   40 long-context, 40 multi-turn) with exact McNemar and bootstrap CIs (E98; GAP-REGISTER "QUALITY BAR v2"). Until it
   exists, the 178-item eval + 48-case tools set are breakage detectors only.
 - **Cost-aware expert placement: compute in place vs copy.** Issue [#6](https://github.com/mw00/project-maya/issues/6)
   found that, for RAM-tier experts, computing on the CPU beat copying the weights over PCIe. We want the placement
   planner to choose per expert and per token between compute-in-place and copy, using the measured cost of each.
+
+- **N22: dense-model profile on Ciru's Qwen3.8-27B.** The NPU outlook (E135) predicts dense models fit an NPU offload
+  far better than GLM; take a GPU-only prefill profile first (more than 60% offloadable dense GEMM means prototype).
+- **N23: NPU as a side-model device.** Run a small side model on the NPU beside Maya (E135).
+- **N14: FCLK 1600 hang test.** Check whether the Strix fabric clock hang reproduces at a 1600 MHz hold.
+- **#1605 comment.** Post the comment on #1605 (open).
+- **gfx1151 ROCm 10 hipBLASLt table.** Offer our gfx1151 ROCm 10 hipBLASLt table as a follow-up to upstream #162.
+- **Speculative sampling on the dual setup.** Test upstream #145 on the R9700 + RX 7900 XT pair.
+- **Open upstream:** #98/#113 (rebased and parity-checked on gfx1151) and the #143 NaN guard (rebased onto #146).
 
 ## Later, bigger bets (only if the numbers justify them)
 

@@ -5,7 +5,7 @@ built only from records that exist: the upstream PR descriptions and comments, t
 reports. Where a number is a single run, a small run, or noisy, the entry says so. Where no record exists, the entry says
 that instead of filling the gap.
 
-Last updated 2026-10-11; E49-E69 consolidate the current working records (source, CPU, build and GPU audits), E70-E77 record the v1.0.32 everyday measurements, E79-E90 record the 2026-10-11 Strix decode/R9700 tuneup work, and E91-E99 the afternoon's verify-fuse, prefill, quality-bar and dual-card results. A machine-readable copy is kept next to the benchmark data (`experiments.jsonl`, same IDs).
+Last updated 2026-10-13; E49-E69 consolidate the current working records (source, CPU, build and GPU audits), E70-E77 record the v1.0.32 everyday measurements, E79-E90 record the 2026-10-11 Strix decode/R9700 tuneup work, and E91-E99 the afternoon's verify-fuse, prefill, quality-bar and dual-card results; E100-E137 (2026-10-11 to 2026-10-13) cover the Strix power/BIOS and PerfOpt-kernel work, the NPU viability line, the digit-split root cause and the upstream PR rebases. A machine-readable copy is kept next to the benchmark data (`experiments.jsonl`, same IDs).
 
 ## How to read this
 
@@ -125,6 +125,44 @@ not controlled studies.
 | E97 | Prompt speed | Strix prompt MoE expert-quant microbench (hypothesis 1h) | CLOSED-no-gain |
 | E98 | Quality | Quality bar for approximate speed levers | DESIGN |
 | E99 | Two GPUs | Dual R9700 + 7900 XT Maya-S retune on v1.0.33 | MEASURED |
+| E100 | Public-source research | Strata v0.1.43 mapped to Maya v1.0.34 | LEAD |
+| E101 | Strix power | Strix (gfx1151) OS power-profile A/B attempt | BLOCKED |
+| E102 | Strix prefill | Strix cumulative bundle `exp/bundle-gfx1151` | CLOSED-no-gain |
+| E103 | Strix power | Strix `powerprofilesctl performance` vs balanced | CLOSED-no-gain |
+| E104 | Strix decode | Strix DFlash2 block drafting (draft PR #106, `--dflash`) | CLOSED-no-gain |
+| E105 | Single R9700 | Maya-M + PR #103 trunk keep vs Maya-S exact | MEASURED |
+| E106 | Strix prefill | Strix exact batched DSA score/top-k/selected-MLA rows (candidate 3) | CLOSED-no-gain |
+| E107 | Upstream PRs | #96 follow-up: batched MLA `k_b/v_b` rows ported onto PR #96 head | KEPT |
+| E108 | Research | Gyro/Radiance single-R9700 methods mapped onto Gyro/Strata | KEPT |
+| E109 | Research | ROCmFPX #37-#52 mapped onto Gyro/Strata and the Maya GLM MTP draft head | KEPT |
+| E110 | Two GPUs | Maya-M on the dual card (R9700 + RX 7900 XT): config and speed | KEPT |
+| E111 | Reliability | Maya GLM NaN guard (Strata #1892) ported to the GLM pack path | KEPT |
+| E112 | Prompt speed | R9700 (gfx1201) fused prompt experts vs MMQ | REJECTED |
+| E113 | NPU | Strix XDNA2 NPU prefill offload desk study (gufo design on GLM-5.3-Flash) | DESIGN |
+| E114 | Strix prompt | Strix config-only A/B: `PREFILL_SUB 8192` / `PREFILL_MB 24576` / T=8192 hipBLASLt table | KEPT |
+| E115 | Strix prefill | Strix fused prompt-MoE launch geometry (ROCmFPX #95 lead) | CLOSED-no-gain |
+| E116 | Strix power | Strix BIOS `Performance` power mode A/B | MEASURED |
+| E117 | Strix power | Strix `iommu=pt` vs `amd_iommu=off`: does unblocking the NPU cost the GPU? | MEASURED |
+| E118 | Strix power | Strix GPU fabric clock pinned at 2000 MHz vs auto | KEPT-small |
+| E119 | NPU | Strix XDNA2 NPU prefill offload feasibility: real NPU GEMM rate and GPU/NPU contention | MEASURED |
+| E120 | Kernel | Debian kernel packages with AMD IOMMU PerfOpt for nimo, plus an out-of-tree amdxdna driver | KEPT |
+| E121 | Strix decode | Strix sub-gate wins stacked: fused tiles v5 + a Q4_K copy of the MTP draft head | NO-ADOPT |
+| E122 | NPU | Strix NPU: gufo's bfp8 GEMM rebuilt for a GLM shape (K=4096) with the open mlir-aie/IRON toolchain | MEASURED |
+| E123 | Strix kernel | PerfOpt kernel 7.3.0-rc6-perfopt+ with `iommu=pt`: does it recover the E117 prefill tax? | MEASURED |
+| E124 | Two GPUs | Dual R9700 + RX 7900 XT: explicit 16384 prefill chunk vs the auto 8192 on a layer split | CLOSED-no-gain |
+| E125 | Strix kernel | PerfOpt kernel 71-minute GPU (Maya-S multi-turn) + NPU (gufo bfp8 GEMM) soak | MEASURED |
+| E126 | Single R9700 | Local R9700 replay of the nimo multi-turn digit-split | CLEAN-LOCALLY |
+| E127 | Strix correctness | nimo digit-split root cause: the everyday server ran a stale Python tokenizer layer | FIXED |
+| E128 | Strix correctness | nimo digit-split fix applied: launchers now use the verify-fuse serve layer | FIXED |
+| E129 | NPU | Strix NPU at decode-shaped work (M=1..16): can it take the MTP draft head off the GPU? | NO-GO |
+| E130 | NPU | Strix NPU zero-copy (hipHostMalloc + XRT userptr BO) and async beside a real 32K GPU prefill | MEASURED |
+| E131 | NPU | Strix NPU compiler gap: identify the compiler behind gufo's shipped 27.6-TFLOPS xclbin | NO-GO |
+| E132 | NPU | Strix NPU viability for the GLM DSA lightning indexer: share of long-context prefill and decode | CLOSED-no-go |
+| E133 | NPU | Strix NPU offload of GLM's KDA q/k/v projections overlapped with the GPU (N8) | NO-GO as built |
+| E134 | NPU | Strix NPU KDA q/k/v split re-measured with the partial-N hipBLASLt shapes tuned (N8b) | NO-GO at the +3% gate |
+| E135 | NPU | NPU model-fit outlook (speculative) | SPECULATIVE |
+| E136 | Research | Desk transfer study: gufo int8/WMMA prefill PRs vs GLM-5.3-Flash prefill | DESK |
+| E137 | Strix reliability | gfx1151 SDMA / interleaved-session crash check (gufo-org/gufo#569) | MEASURED |
 
 ## Prompt speed
 
@@ -1854,3 +1892,459 @@ Report: `results/ds-nimo-decode-kernels.md`, evidence
 **Decision.** Ship `project-maya/maya-2gpu-best-7900.json` = v1.0.33 `build-multi` (`528d2b4`) + `RESERVE_MB 1024` + `PREFILL_ATTN=wmma2` + `PREFILL_SUB 2048`/`PREFILL_MB 8192` + `KV_INT8=1`, 131072 ctx, auto split, temp 0.0; server left running (`start7900.sh 2gpu-best`, `/health` ok). `project-maya` untouched.
 
 **Caveats.** The serve fast path pipelines one token per round, so MTP tokens/round is ~1.008 by construction (accept = a draft hit avoiding a head redo), not the batch-verify 1.75; MTP off vs on was not measured; single-arm deltas below ~2% are within the CPU-lane calibration noise. Report: `results/ds-dual-v1033.md`, evidence `results/ds-dual-v1033/`.
+
+### E100 - Strata v0.1.43 mapped to Maya v1.0.34 (LEAD: ranked Maya-applicable levers; nothing ported or measured)
+
+**Question.** Which of Strata v0.1.43's switches apply to Maya GLM-5.3 (v1.0.34, `e728e52`)?
+
+**Setup.** Source-only read of the v0.1.42...v0.1.43 diff (72 commits, 66 files). No GPU, server, build or request.
+
+**Result.** All figures are the Strata author's. PF_FUSED (gfx12 fused int8 prompt experts) covers GU IQ2_XXS/XS/S, IQ3_XXS/S, IQ4_XS and down Q2_0/IQ4_NL only, so Maya-S (IQ2_XXS GU + IQ3_XXS down) fails the down gate; on R9700 one card prompt 4K +15.7%, 16K +13-17%, 32K +19-20%, 96K +16%, identical text, first-token KL within noise of MMQ (IQ3_XXS 0.00613 vs 0.00683). GFX12_CHUNK auto cap 8192->16384: R9700 +0.5..+5.8%. ROUTE_TAIL_SKIP: single cards 1.13-1.16x decode, KL 0.003-0.006, top-1 97.7-98.2%; 2x R9700 16GB-eq Q2_0 -6.1%, IQ3_S +7-10%. PcieAuto: 3060 1.300x, P100 1.011, A4000 0.999, KL 0.0011-0.0015. Graph node fusion +1.6-2.0% decode, bitwise. ROUTE_RESIDENT R9700 +1.6-2.4% (32GB) / +5.7-7.8% (16GB-eq). `--pipeline-windows` 4x R9700 +7-12% code, 2 stages -3%. NAN_GUARD: 4.8 us/window (0.009%), byte-identical absent NaN.
+
+**Decision.** LEAD list, no code changed. Ranked: (1) gfx12 fused prompt kernel for gfx1201 via the existing #98 branch; (2) route tail skip / `STRATA_GLM_TRUNK_KEEP` (changes answers; already measured, E95); (3) NaN guard port from Strata #1892 (reliability, answers unchanged); (4) decode graph node fusion; (5) route-resident warp-per-token (risky); (6) adapt overlap. Not applicable: `--pipeline-windows` (our split is 2 stages), the GFX12 chunk (Maya already 32768 single), measured PCIe share (Maya's CPU-lane calibration already does it). Adopt the `strata_bench.py` packaging idea (versioned redacted results, `--compare`).
+
+**Caveats.** Research only; Strata gains are the author's A/Bs on other machines; its gfx12 default was measured on IQ3_S/Q2_0 packs, not Maya-S; Maya v1.0.34 main has no fused prompt kernel (#98 lives on a branch); ROUTE_RESIDENT's margin swap is approximate. Report: `results/ds-strata-0143-map.md`.
+
+### E101 - Strix (gfx1151) OS power-profile A/B attempt (BLOCKED: the performance profile cannot be selected from the session)
+
+**Question.** Does the OS `performance` power profile raise the Strix prefill clock (G1 clock limit)?
+
+**Setup.** nimo, balanced profile active. `powerprofilesctl set performance`, `sudo -n` and the DPM sysfs level were all tried.
+
+**Result.** `powerprofilesctl set performance` fails with a polkit AccessDenied; passwordless sudo is unavailable; no ACPI `platform_profile`; `power_dpm_force_performance_level` is root-only (auto). Balanced prefill stays at 2.42-2.45 GHz median at 84-85 W (32K and 64K cells).
+
+**Decision.** No A/B arm. Keep balanced; no BIOS touched. The profile was later switched by the user and measured in E103.
+
+**Caveats.** Single machine; the denial is an authorization result, not a clock measurement. Report: `results/ds-nimo-bundle.md`.
+
+### E102 - Strix cumulative bundle `exp/bundle-gfx1151` (CLOSED-no-gain: +0.55/+2.41/+2.82% prompt at 8K/32K/64K, below the +3% gate)
+
+**Question.** Do the Strix sub-gate wins stack into a switchable build?
+
+**Setup.** Branch `exp/bundle-gfx1151` from `d119b72`: #44 quantize order + MLA chunk16/hierarchical combine + hc mode 4 + `PREFILL_SUB 8192` / `PREFILL_MB 24576` + a 12-key hipBLASLt table retuned at T=8192 (84 rows). Fresh server per cell, copied usage, receipt + preflight, greedy, `cache_n 0`, 3 runs per prompt cell. All six parity tests PASS; hc mode 4 vs 3 bit-identical.
+
+**Result.** Prompt tok/s everyday -> bundle: 8K 352.67 -> 354.60 (+0.55%), 32K 340.63 -> 348.83 (+2.41%), 64K 333.27 -> 342.67 (+2.82%). Deterministic NO_SPEC 54.80 -> 54.58 ms/tok (-0.40%). Spec-on (informational) identical-prompt mean 22.98 -> 22.60.
+
+**Decision.** Do not switch the everyday build: below the +3% prompt / +2% NO_SPEC gate. The config-only pair (SUB 8192 + retuned table) carries the gain; the code merges add no measurable prompt win (confirmed by E114). Keep the branch as a candidate.
+
+**Caveats.** Single 256-token reply per decode type (spec-on informational); 8K cell includes startup-dominated clock sampling. Report: `results/ds-nimo-bundle.md`.
+
+### E103 - Strix `powerprofilesctl performance` vs balanced (CLOSED-no-gain: the profile is CPU-only; prompt -0.43..+0.36%, NO_SPEC +0.13%)
+
+**Question.** Does the OS `performance` profile raise the Strix GPU clock or package power (G1 hypothesis 1g)?
+
+**Setup.** The user switched nimo to `performance`. power-profiles-daemon 0.21's amd_pstate driver writes only CPU governor + EPP (no GPU DPM, no package limit). Everyday exe/config re-run with the E102 protocol, 3 runs per cell.
+
+**Result.** Prompt 8K/32K/64K 352.67/340.63/333.27 -> 353.93/340.23/331.83 (+0.36/-0.12/-0.43%). NO_SPEC 54.80 -> 54.87 ms/tok (+0.13%). Busy prefill sclk 2447/2448 -> 2438/2431 MHz at 32K/64K; package power pinned at 85 W in every sustained cell under both profiles.
+
+**Decision.** Closed for the profile lever. The 85 W ceiling and ~2.45 GHz prefill clock are firmware/BIOS-set; a faster Strix prefill needs a BIOS power-mode change (E116).
+
+**Caveats.** Spec-on decode is acceptance-bound (E88), so its moves are informational; the +3 C 64K edge temperature is confounded with ambient. Report: `results/ds-nimo-power-perf.md`.
+
+### E104 - Strix DFlash2 block drafting (draft PR #106, `--dflash`) (CLOSED-no-gain: +1.9% over the branch's plain loop, -17.8% vs the everyday #96 + verify-fuse)
+
+**Question.** Does DFlash2 block drafting beat our everyday MTP decode on one gfx1151?
+
+**Setup.** Worktree on `needmorevram:glm-dflash2` `90b832c`, two minimal HIP build fixes (`94e6fe5`). Drafter Anbeeld/GLM-5.3-Flash-DFlash2-GGUF Q4_K_M (697,017,248 B, hash matches the HF LFS oid). `glm_dflash_test` and five other tests PASS. Nine fresh-server arms, greedy, 4 types x2 x256 plus one decode after ~33.1K.
+
+**Result.** Decode tok/s: plain NO_SPEC 19.10; `--dflash` defaults 19.46 (+1.9%); spec 2/3/4/7 19.05/19.69/19.89/19.19; selector cut 0.5 15.40 (-19.4%), cut 0.0 10.40 (-45.5%). Everyday #96 + verify-fuse 23.68, so the best arm (spec 4) is -16.0% and defaults -17.8%. Greedy text is not token-identical to the plain loop (chat matches; code/reasoning/prose differ).
+
+**Decision.** Do not switch the everyday config. The two HIP CMake fixes (hip_expert_cache_staging links strata_prefill; glm_dflash_test built under HIP) are the upstream-useful outcome.
+
+**Caveats.** One gfx1151, Maya-S only; the comparison crosses branches and part of the gap is the missing #96 single-GPU MTP on the DFlash branch; two runs per type, so deltas below ~4% are inside the acceptance-bound spread. Report: `results/ds-nimo-dflash2.md`.
+
+### E105 - Maya-M + PR #103 trunk keep vs Maya-S exact (MEASURED: M + stronger keep map 25.23 tok/s (+16.4% vs M, -0.4% vs S) and passes Gate A and B; everyday not switched)
+
+**Question.** Is Maya-M with trunk keep a better single-R9700 everyday than Maya-S exact?
+
+**Setup.** Build `maya-v1033` `528d2b4`, R9700, 131072 INT8, greedy, receipt + preflight, fresh server per arm. Arms: S exact, M exact, M + upstream MAP, M + stronger MAP. Gate A: offline scoring, 1024-token held-out texts, reference = Maya-M exact dump. Gate B: tools expanded 12 -> 48, IFEval strict, NIAH 32/64/120K, HumanEval 30, 178-item eval.
+
+**Result.** Decode tok/s: S exact 25.34 (32K 21.8); M exact 21.68; M + upstream MAP 24.74 (+14.1% vs M, -2.4% vs S); M + stronger MAP 25.23 (+16.4%, -0.4% vs S); prompt M + stronger 8K 765.6 / 32K 758.7. Gate A mean KL / top-1: M + upstream 0.0266/93.6%, M + stronger 0.0447/92.2%, S exact vs M 0.1499/85.7%. Gate B: tools 48/48 (M exact, M + stronger), 47/48 (M + upstream, S exact; the known t04 near-tie); NIAH M + upstream 4/4/3 at 120K, others 4/4/4; HumanEval 30/30 all arms. 178-item: M exact v1.0.33 157, M + upstream 159, M + stronger 160, S exact 154. Paired McNemar M + stronger vs M exact +6/-3 (+1.69 pp, CI -1.7..+5.1).
+
+**Decision.** M + stronger MAP passes Gates A and B and beats Maya-S exact as an everyday candidate; M + upstream is rejected on Gate B (NIAH 120K and t04). Per the brief the everyday config was not switched; the server was restored.
+
+**Caveats.** NIAH n=4 per rung; per-token p99 KL is not emitted; cross-pack KL (S vs M) is informational; the v1.0.32 -> v1.0.33 build change moved M exact 164 -> 157, so the same-build exact is the reference. Report: `results/ds-r9700-m-keep.md`.
+
+### E106 - Strix exact batched DSA score/top-k/selected-MLA rows (candidate 3) (CLOSED-no-gain: byte-identical but FIXED=1 verify regresses 73.75 -> 80.95 ms/round)
+
+**Question.** Is the DSA index + top-k + gather + MLA block big enough, and does an exact batched rows path (T=2 verify) cut the verify round?
+
+**Setup.** Part 1: phase profile on the everyday exe `6136fe7d`, ~64K and ~120K prompts, `cache_n 0`. Part 2: branch `exp/dsa-rows-gfx1151` (base `d119b72`), opt-in `STRATA_GLM_DSA_ROWS=1`, batched `dsa_score_rows`/`dsa_select_rows` + `mla_split_rows2`.
+
+**Result.** Prefill 64K 335.5 tok/s (dsa_index 4.37%, dsa_attn 15.36%); 120K 322.4 tok/s (dsa_index 7.73%, dsa_attn 15.06%); index + top-k + gather + MLA = 22.8% of the 120K wall. 32K cell-set Jaccard 0.597, rank-aligned chunk union 60.4/64. Rows path byte-identical (selected IDs sha `5ff8c00a`, logits max_abs 0, six parity tests PASS) but `STRATA_GLM_MTP_FIXED=1` verify 73.75 -> 80.95 ms/round (gate needs -1.50); NO_SPEC 54.74 ms/tok both.
+
+**Decision.** Rejected; everyday config unchanged. Set overlap does not survive rank alignment (union shares ~5%), so load-once has no headroom. The DSA block is dominated by MLA gather + attention (15.0%), whose fused/streamed ceiling is ~6-7% of wall.
+
+**Caveats.** One machine, Maya-S; T=2 only (DFlash2 not adopted, so T up to 8 untested); phase marks are stream intervals, not exclusive kernel costs; default-config decode is acceptance-bound (E88). Report: `results/ds-nimo-dsa-rows.md`.
+
+### E107 - #96 follow-up: batched MLA `k_b/v_b` rows ported onto PR #96 head (KEPT: exact, parity PASS; opened as upstream PR #117)
+
+**Question.** Can the verify-fuse part A (batched MLA `k_b/v_b` rows) be offered upstream on top of #96?
+
+**Setup.** Branch `perf/pr96-mla-rows` `0fe19d6` on PR #96 head `3486f6d`; HIP gfx1100 + gfx1201, ROCm 7.2.1. `glm_mla_rows_test` (default and ATTN1, 48 cases each), `glm_layer_parity`, `glm_model_test` on R9700 and RX 7900 XT. CUDA not compiled.
+
+**Result.** Byte-identical in all 48 cases per mode; parity PASS on both cards. The first queued run failed only on `LD_LIBRARY_PATH`; the rerun with the ROCm 7.2.1 lib path passed. Opened as `mw00/project-maya#117`.
+
+**Decision.** Exact change, offered upstream as #117.
+
+**Caveats.** Parity only; no speed arm on the discrete cards in this entry. Evidence: `results/codex-pr96-mla-rows.md`.
+
+### E108 - Gyro/Radiance single-R9700 methods mapped onto Gyro/Strata (KEPT: source-only method map, no speed gain)
+
+**Question.** Which Radiance single-R9700 methods map onto the Gyro/Strata fork?
+
+**Setup.** Source-only read; zero GPU runs, builds or model requests. Nine mechanisms mapped.
+
+**Result.** Verdicts: 4 already present, 5 gaps, 5 n/a or partial, 4 mixed. Ranked levers: (1) extend the grouped MMQ expert gather to sub-1024 staged chunks; (2) log and tune the actual MMQ tile choice on gfx1201; (3) port the CUDA-only GDN key-head recurrence to HIP before any chunked scan; (4) finish the HIP WMMA quality screen to keep the author's +30% 4K win.
+
+**Decision.** Keep as a research map, not a port. No kernel change, GPU job or default change authorized.
+
+**Caveats.** All phase and throughput numbers are the author's, not reproduced; the 'dequant' label is not a single kernel; Gyro citations are the `89e0a73` fork line. Report: `results/ds-gyro-radiance-map.md`.
+
+### E109 - ROCmFPX #37-#52 mapped onto Gyro/Strata and the Maya GLM MTP draft head (KEPT: source-only map; the one exact portable gap is #44)
+
+**Question.** Which ROCmFPX #37-#52 changes transfer to the Gyro/Strata fork and to Maya's GLM MTP draft head?
+
+**Setup.** Source-only read; 16 PRs mapped; no GPU, build or server.
+
+**Result.** Verdicts: 4 already present, 2 gaps, 7 n/a, 3 mixed. The one exact portable gap is #44 chunk-fastest `quantize_mmq_q8_1` (ROCmFPX measured +4.6% at ub8192; Gyro's default chunk is 8192). The HC fusions already exist in Gyro's fused kernels. #45 is the right algorithm for Gyro-S's GDN but is RDNA3-gated. #52's dynamic per-sequence 16,384-row draft vocabulary is a real Gyro gap (its static subset is 106,299 rows). For Maya's draft head, a #49/#52-style change is a bounded Strix experiment (~2-3% e2e).
+
+**Decision.** Keep as a research map. No kernel change, GPU job or default change authorized.
+
+**Caveats.** Author numbers not reproduced; the GLM head type (Q6_K) is inferred, not read from the pack manifest. Report: `results/ds-gyro-rocmfpx-map.md`.
+
+### E110 - Maya-M on the dual card (R9700 + RX 7900 XT): config and speed (KEPT: Maya-M + stronger keep map 38.94 tok/s (+4.9% vs same-session Maya-S best 37.11))
+
+**Question.** Can Maya-M with the stronger trunk keep map be the dual-card config?
+
+**Setup.** Dual config, 131072 ctx, `RESERVE_MB 1024`, `RAM_GB 110`, `PREFILL_SUB 2048` / `PREFILL_MB 8192`, greedy, 3 warm-ups x 2 reps x 256. Three arms: Maya-S best, Maya-M exact, Maya-M + keep map. Smoke: 12 tool cases + NIAH 64K.
+
+**Result.** Decode: S best 37.11, M exact 31.45, M + keep 38.94 (+4.9% vs S, +23.8% vs M exact). 8K 680.0 (-5.7% vs S), 32K 1088.5 (-0.8%), decode after 32K 36.5 (+4.0%), accept 78.1%, slots 155/79. Smoke tools 11/12 then 12/12 (only the known t04 flip), NIAH 64K 4/4.
+
+**Decision.** Deliver `maya-2gpu-m-7900.json` (Maya-M + `STRATA_GLM_TRUNK_KEEP_MAP`); the R9700 everyday was restored.
+
+**Caveats.** The same-session Maya-S reference (37.11) is ~8% below the published E99 40.30, so deltas are vs the same-session arm; smoke is tools + NIAH only; Maya-M prompt speed stays 0.8-5.7% below Maya-S. Report: `results/ds-dual-maya-m.md`.
+
+### E111 - Maya GLM NaN guard (Strata #1892) ported to the GLM pack path (KEPT: byte-identical guard on/off 3/3 at 0.028% cost; candidate branch only)
+
+**Question.** Can Strata's non-finite-logits window guard be ported to Maya's GLM path without changing answers?
+
+**Setup.** Branch `fix/glm-nan-guard` `92756b5` (+220 lines, 10 files): per decode window a GPU exponent-bit check of the head logits into mapped flags; a flagged window emits nothing, drops the live session/checkpoint, and the next prompt restarts from token 0; serve re-sends once. R9700 Maya-S NO_SPEC, greedy, 3 prompts x 256, placement pinned.
+
+**Result.** Guard on vs off byte-identical 3/3. `logits_nonfinite` 0.017 ms/tok of 60.43 ms/tok = 0.028%. With `STRATA_GLM_NAN_INJECT=1`: window 1 flagged, nothing emitted, state dropped, retried once, retried answer equals the unpoisoned control 3/3.
+
+**Decision.** Port as-is; `STRATA_GLM_NAN_GUARD` on by default, `=0` off. Branch prepared only; no push or PR.
+
+**Caveats.** `STRATA_GLM_SEQS>1` not covered (per-sequence flags are a follow-up); MTP/DFlash heads are guarded in code but not exercised end-to-end on one card; CUDA not built; the injection is host-side. Report: `results/ds-maya-nan-guard.md`.
+
+### E112 - R9700 (gfx1201) fused prompt experts vs MMQ (REJECTED: needs >= +5% at 32K; measured -0.4% / -0.8% at 32K / 64K)
+
+**Question.** Does the #98 / Strata 0.1.43 fused prompt expert path beat MMQ on gfx1201?
+
+**Setup.** Kernel bench plus end-to-end Maya-S arms on one R9700. The agent was killed by a session restart mid second fused arm; closed from its files.
+
+**Result.** Kernel: fused gate+up+down 46-55 TOPS vs MMQ 81-108 TOPS (~0.6x); four tuning variants within +/-1%. End to end: 8K 802 vs 801, 32K 785 vs 788 (-0.4%), 64K 770.5 vs 777 (-0.8%); decode unchanged.
+
+**Decision.** Rejected for gfx1201 (gate was +5% at 32K).
+
+**Caveats.** Thin record: closed after an interrupted run. Report: `results/ds-r9700-fused-prefill.md`.
+
+### E113 - Strix XDNA2 NPU prefill offload desk study (gufo design on GLM-5.3-Flash) (DESIGN: GO for a hardware study only; central +5..+15% prefill estimate)
+
+**Question.** Could an XDNA2 NPU offload dense GEMMs from Maya's GLM prefill, following gufo's design?
+
+**Setup.** Read-only study of mikealanni/gufo against `maya-v1033`. Gufo runs one fixed bfp8 GEMM (M=4096, K=2560, N=1024) via XRT on pinned host pages the GPU also reads/writes, overlapped with GPU work; the author measured +7.2% prefill at 16K and +5.0% at 32K (approximate, greedy-identical on 30 prompts). No GPU run.
+
+**Result.** GLM candidates independent of routed MoE (KDA projections, DSA projections, shared expert, dense FFN) are 35.6% / 34.7% of the 32K / 64K wall. Ideal overlap ceiling +22% to +36%; after gufo's realization and per-layer serialization the estimate is +8..+18% (central ~+12%). Power is the risk: nimo's 85 W cap is binding, and if the NPU's draw comes from the GPU share the gain cancels (net -5..+5%).
+
+**Decision.** Queue a measurement-only NPU feasibility brief (NPU-alone rate, then concurrent with a 32K prefill). Do not port before that pair (E119).
+
+**Caveats.** Gufo publishes no per-GEMM rate (the ~3.9 TFLOPS figure was a back-out, later shown to be a lower bound); the shipped xclbin is K=2560 only; bfp8 is a Class-1 approximate change needing the quality gate; power figures are from a different (Windows) box. Report: `results/ds-npu-desk-study.md`.
+
+### E114 - Strix config-only A/B: `PREFILL_SUB 8192` / `PREFILL_MB 24576` / T=8192 hipBLASLt table (KEPT: +2.55/+3.78/+3.62% prompt at 8K/32K/64K, NO_SPEC -0.14%; adopt the config pair)
+
+**Question.** Does the config-only pair carry the E102 bundle gain on the everyday exe?
+
+**Setup.** Everyday exe `6136fe7d`, `maya-nimo-next.json` (SUB 4096 / MB 12288 / everyday table) vs the same config plus `STRATA_GLM_PREFILL_SUB 8192`, `STRATA_GLM_PREFILL_MB 24576` and the 84-row T=8192 table (`ef73b65e`). Three interleaved fresh-server runs per arm per cell, `cache_n 0`, greedy.
+
+**Result.** Prompt 8K 352.67 -> 361.67 (+2.55%), 32K 336.83 -> 349.57 (+3.78%), 64K 331.27 -> 343.27 (+3.62%). NO_SPEC 54.905 -> 54.828 ms/tok (-0.139%, never slower). Spec-on mean 22.59 -> 22.08 (acceptance 75.7% -> 72.2%, informational).
+
+**Decision.** The adoption rule (>= +1.5% at 32K and 64K, no length worse than -0.5%, NO_SPEC not slower by >0.5%) passes: add the three env vars to the everyday config (coordinator switch).
+
+**Caveats.** Baseline at 32K/64K ran below E102's everyday while arm b matched E102's bundle; spec-on is acceptance-bound. Report: `results/ds-nimo-config-pair.md`.
+
+### E115 - Strix fused prompt-MoE launch geometry (ROCmFPX #95 lead) (CLOSED-no-gain: v5 kernel +11% GU in microbench but only +0.10..+0.91% prompt end to end)
+
+**Question.** Does a different ROWS x TILE x warps x LDS-buffering geometry speed up the fused #98 kernel?
+
+**Setup.** Fused #98 native kernel parameterized (10 variants, all byte-identical). Microbench at E=4096, FF=2048, 16384 rows; end-to-end arms on the everyday exe with all 42 layers, 2 runs, `cache_n 0`.
+
+**Result.** The exact ROCmFPX #95 analog (64 rows / 4 warps / double-buffered) does not reproduce (GU 0.945/0.973/1.004x). Winner v5 (64 rows / 4 warps / single-buffered): GU 1.116/1.113/1.119x and down 1.061/1.057/1.052x at T=128/512/2048; occupancy 4 -> 6 waves/SIMD. End to end: prompt +0.10/+0.38/+0.91% at ~8K/32K/64K; NO_SPEC 54.850 vs 54.823 ms/tok. Pack correction: the down layers are 34/42 IQ2_S and 8/42 IQ3_XXS, not IQ3_XXS as the repo labels it. In-situ: fused MoE is 30.9% of kernel-busy time.
+
+**Decision.** Do not switch the everyday build. Keep v5 (`STRATA_GLM_FUSED_TILES=5`) as an opt-in bundle candidate; the #95 geometry is closed on our kernel.
+
+**Caveats.** Below the +3% gate; the first end-to-end run covered only 8/42 layers (corrected in the final run); spec-on not re-measured. Report: `results/ds-nimo-fused-tiles.md`.
+
+### E116 - Strix BIOS `Performance` power mode A/B (MEASURED: package cap 85 -> ~140 W, prefill +8.3/+10.7/+9.9% at 8K/32K/64K, decode flat)
+
+**Question.** Does the BIOS `Performance` mode raise the Strix GPU cap and speed (G1 hypothesis 1g)?
+
+**Setup.** nimo (AMI BIOS 3.05), the user-set BIOS mode vs the previous default, everyday config `maya-nimo-next.json` with SUB 8192 / MB 24576 / table `ef73b65e`. Three runs per cell, `cache_n 0`, greedy, 0.5 s clock/power sampler.
+
+**Result.** Busy 32K sclk 2443/2498 -> 2845/2871 MHz (med/p90), fclk 1633/1652 -> 1736/1821, package 85 -> 140 W (peak 151), edge 76/79 -> 85/90 C. Prompt 361.67 -> 391.57 (+8.27%) at ~8K, 349.57 -> 387.03 (+10.72%) at ~32K, 343.27 -> 377.30 (+9.91%) at ~64K. NO_SPEC 54.828 -> 54.105 ms/tok (-1.32%, bandwidth-bound); spec-on 22.08 -> 23.52 tok/s (informational).
+
+**Decision.** Keep the BIOS mode: it, not the OS profile (E103), lifts the firmware cap. No power setting changed by this job.
+
+**Caveats.** The pre-BIOS baseline is historical (E114), not same-session; only one BIOS mode compared; the ~140 W is an observed load level, not a readback; 64K package power settles at 121 W median at 83-89 C. Report: `results/ds-nimo-power-bios.md`.
+
+### E117 - Strix `iommu=pt` vs `amd_iommu=off`: does unblocking the NPU cost the GPU? (MEASURED: iommu=pt costs -7.93% / -7.25% prefill at ~32K / ~64K; decode flat)
+
+**Question.** What does switching the boot flag `amd_iommu=off` -> `iommu=pt` (needed for the NPU) cost the GPU?
+
+**Setup.** After the user's flag change, short protocol on the E116 config: 2 runs per cell, ~32K, ~64K and NO_SPEC only, fresh server per cell, `cache_n 0`. Baseline is E116 (`amd_iommu=off`, same config and exe).
+
+**Result.** Prefill ~32K 387.03 -> 356.35 tok/s (-7.93%), ~64K 377.30 -> 349.95 (-7.25%); NO_SPEC 54.105 -> 54.425 ms/tok (+0.59%). Busy sclk and package power unchanged (32K 2859 vs 2845 MHz, 138.8 vs 139.7 W), fclk auto.
+
+**Decision.** Report the cost so the NPU-vs-GPU trade can be decided; the DMA-path overhead is not a clock effect (see E123 for the recovery).
+
+**Caveats.** Two runs per cell; 8K and spec-on decode skipped; the baseline is the previous boot, not same-session; NO_SPEC +0.59% is within noise. Report: `results/ds-nimo-iommu-check.md`.
+
+### E118 - Strix GPU fabric clock pinned at 2000 MHz vs auto (KEPT-small: prompt +2.20% / +1.63% at ~32K / ~64K, NO_SPEC -0.13%)
+
+**Question.** Does holding `pp_dpm_fclk` at 2000 MHz (the gufo author's `fabric-clock.sh hold`) speed up GPU-only prefill?
+
+**Setup.** The user held fclk level 7 (2000 MHz, manual DPM) on the E117 config (`iommu=pt`, BIOS Performance); E117 short protocol, 2 runs per cell, ~32K, ~64K and NO_SPEC.
+
+**Result.** Prompt ~32K 356.35 -> 364.20 tok/s (+2.20%), ~64K 349.95 -> 355.65 (+1.63%); NO_SPEC 54.425 -> 54.355 ms/tok (-0.13%). Fabric clock a flat 2000 MHz in 1086/1086 busy prefill samples vs ~1703/1716 MHz auto; sclk and package power flat (139.1 vs 138.1 W at 32K).
+
+**Decision.** Adopt-worthy but small: a +17% fabric clock buys ~+2% prompt. A 3-run confirmation would harden the 64K cell (only +0.13 pt over the gate). Hold left as the user set it.
+
+**Caveats.** Two runs per cell, short protocol; baseline is E117 from a previous boot state. Report: `results/ds-nimo-fclk-pin.md`.
+
+### E119 - Strix XDNA2 NPU prefill offload feasibility: real NPU GEMM rate and GPU/NPU contention (MEASURED: NPU 27.05 TFLOPS alone; a 32K prefill loses only -7.29% while the NPU loops; GO for a one-shape port-feasibility step)
+
+**Question.** What GEMM rate does the XDNA2 NPU actually reach with gufo's bfp8 kernel, and what does it cost a concurrent GPU prefill?
+
+**Setup.** Preconditions met (`iommu=pt`, NPU opens, XRT 2.25 / amdxdna 0.6.0, fclk held). Gufo's shipped K=2560 xclbin run by a ~200-line XRT dispatcher. Contention: 32K everyday prefill, ABBA, fresh server per cell, `cache_n 0`, 2 runs per arm.
+
+**Result.** NPU alone: median 0.794 ms, 27.05 TFLOPS (95% of the external 28.5 TFLOPS ceiling); verify max rel 1.03e-2. With the GPU busy: 24.18 TFLOPS (-10.6%). 32K prefill GPU-only 362.15 vs NPU+GPU 335.75 tok/s (-7.29%); package W 138.6 -> 139.5 (flat), sclk -1.5%. Dense candidate classes are 1.03 of 2.761 ms/token, so the NPU's 0.63 ms/token hides: ideal +49..+60%, realistic +20..+45%.
+
+**Decision.** GO for a one-shape port-feasibility step (build a GLM-shape xclbin, re-measure); no Maya prototype yet.
+
+**Caveats.** The shipped xclbin is K=2560 only, so GLM needs new xclbins; bfp8 is Class-1 approximate; host encode (70.6 ms for A+B) must move to the GPU.
+
+### E120 - Debian kernel packages with AMD IOMMU PerfOpt for nimo, plus an out-of-tree amdxdna driver (KEPT: PerfOpt kernel 7.3.0-rc6-perfopt+ built; NPU driver built for it)
+
+**Question.** Can we build a kernel carrying the AMD IOMMU PerfOpt patches (integrated-GPU identity-mode bypass) plus a working NPU driver, for nimo?
+
+**Setup.** Shallow clone of the iommu tree `next` (`c233d598`, base 7.3.0-rc6; PerfOpt patches by Mario Limonciello present), nimo's 6.17 config via olddefconfig, `LOCALVERSION=-perfopt`, debug info off. No root; a missing gawk was worked around with a user-space copy. NPU: nimo's DKMS amdxdna 7.0.0 fails on 7.3 (a trace header include path), fixed by a one-line `-I$(src)`; `amd/xdna-driver` main 2.21.0 builds as an alternative.
+
+**Result.** Kernel `7.3.0-rc6-perfopt+` built in ~16 min (903 s compile + 55 s package); `amdgpu.ko` exposes `iommu_perfopt`; vmlinux carries the 'PerfOpt armed' message. Image and headers debs plus both NPU modules shipped to nimo with verified SHA256SUMS. DKMS will not auto-build amdxdna for 7.x, so the prebuilt module is copied to the updates directory.
+
+**Decision.** Deliver the debs and modules; installation, verification and rollback (boot 6.17.0-35, apt remove) are left to the user. Nothing installed by this job.
+
+**Caveats.** Build-only record; the effect is measured in E123 and E125. Report: `results/ds-local-perfopt-kernel.md`.
+
+### E121 - Strix sub-gate wins stacked: fused tiles v5 + a Q4_K copy of the MTP draft head (NO-ADOPT: draft head 316 -> 217 MB and draft host time -19%, but the byte-identity gate cannot be evaluated)
+
+**Question.** Do the fused tiles v5 (E115) and an opt-in Q4_K copy of the MTP draft head (`STRATA_GLM_MTP_HEAD_Q=4`) stack into an adoptable win?
+
+**Setup.** Branch `exp/small-wins-gfx1151` `c3feb13`. The draft vocabulary (98,741 rows) is read as Q6_K = 316 MB/draft; the Q4_K copy reads 217 MB; verify still uses the pack's head. fclk held in both arms. Interleaved ABBA, fresh server per cell, `cache_n 0`, 2 runs per cell.
+
+**Result.** Prompt +0.77% at ~32K and +1.41% at ~64K. Spec-on 4-type 23.23 -> 23.85 tok/s (+2.69%) but acceptance 76.9 -> 84.8% (+7.9 pt). NO_SPEC flat (54.34 vs 54.36 ms/tok). Draft host time 6.24 -> 5.04 ms per request (-19%). Two fresh everyday servers (same config, greedy) disagree on all three prompts at the first token while the NO_SPEC path is reproducible, so the MTP verify/adaptive path is non-deterministic.
+
+**Decision.** NO-ADOPT under the stated rule: byte-identity cannot be demonstrated, 32K +0.77% is below the +1.0% gate, and the acceptance shift is outside the 1 pt window. The Q4_K head is correct by construction and faster; it needs the base MTP nondeterminism resolved first.
+
+**Caveats.** Spec-on is one run per arm; Q4_0 was not implemented (no Q4_0 dispatch in `mv()`), Q4_K used instead; the nondeterminism pre-exists in `d119b72`. PR #117 is already contained in `d119b72`. Report: `results/ds-nimo-small-wins-stack.md`.
+
+### E122 - Strix NPU: gufo's bfp8 GEMM rebuilt for a GLM shape (K=4096) with the open mlir-aie/IRON toolchain (MEASURED: builds and verifies, 19.0 TFLOPS NPU-alone (gufo's binary 27.68); the gap is compiler codegen)
+
+**Question.** Can the open toolchain build a GLM-shape bfp8 NPU GEMM at a useful rate, and what does it cost the GPU?
+
+**Setup.** Non-root venv with mlir_aie 1.4.4 and llvm-aie (Peano) 22.0.0; gufo's placed design with a shim for the retired TensorTiler2D, design unedited. Reproduced K=2560, built K=4096 (and a K=8192 probe). Contention: K=4096 loop beside a 32K everyday prefill, ABBA, 2 runs per arm.
+
+**Result.** Shipped K=2560 0.776 ms / 27.68 TFLOPS; rebuilt K=2560 18.0; rebuilt K=4096 19.0 TFLOPS (verify max rel 1.205e-2 PASS); K=8192 19.6 (verify 2.56e-2, CHECK). Cross-pairing the xclbin and instruction streams isolates the ~35% gap to the core ELF (Peano codegen), not the runtime sequence and not K. Contention: GPU-only 364.90 vs NPU-busy 345.80 tok/s (-5.23%), NPU loop -12.3%, package W flat.
+
+**Decision.** K is a pure rebuild (flat rates across K), so the remaining GLM shapes need rebuilds, not redesign; the next step is matching gufo's compiler (E131). Contention is not a blocker.
+
+**Caveats.** ~19 TFLOPS is with Peano 22.0.0; bf16 accumulation error grows with K and bfp8 is Class-1 approximate; NPU power not visible; the zero-copy path was not tested here (E130). Report: `results/ds-nimo-npu-glm-kernel.md`.
+
+### E123 - PerfOpt kernel 7.3.0-rc6-perfopt+ with `iommu=pt`: does it recover the E117 prefill tax? (MEASURED: RECOVERED. ~32K 390.25, ~64K 378.25 tok/s (110.5% / 103.5% of the tax recovered); decode flat)
+
+**Question.** Does the PerfOpt kernel (E120) recover the ~7.5% GPU prefill tax of `iommu=pt` (E117)?
+
+**Setup.** nimo booted the custom kernel with `iommu=pt`; dmesg shows 'AMD-Vi: PerfOpt armed on IOMMU0'. E117 short protocol on the same everyday config and exe (loads unchanged on 7.3), fclk auto, 2 runs per cell, ~32K, ~64K and NO_SPEC.
+
+**Result.** Prefill ~32K 356.35 (E117 pt) -> 390.25 tok/s (+9.51% vs pt, +0.83% vs E116 `amd_iommu=off` 387.03); ~64K 349.95 -> 378.25 (+8.09% vs pt, +0.25% vs off 377.30). NO_SPEC 54.425 -> 54.185 ms/tok (-0.44% vs pt). Busy clocks and package power unchanged (32K sclk 2852 MHz, 140.1 W), so the win is the IOMMU DMA path.
+
+**Decision.** RECOVERED. The NPU can stay enabled (`iommu=pt` is required for SVA/PASID) without the GPU prefill penalty; the last GPU-side blocker to PerfOpt + NPU coexistence is cleared.
+
+**Caveats.** The kernel also moved 6.17 -> 7.3-rc6, so the delta is PerfOpt + kernel and one boot cannot separate them; baselines are from the 6.17 boots; the NPU was not exercised in this job. Report: `results/ds-nimo-perfopt-check.md`.
+
+### E124 - Dual R9700 + RX 7900 XT: explicit 16384 prefill chunk vs the auto 8192 on a layer split (CLOSED-no-gain: 16384 flat at ~8K (+0.5%), loses 13.2% at ~16K and 7.2% at ~32K)
+
+**Question.** Does an explicit 16384 chunk beat the auto 8192 that `glm_prefill.cu` picks on a split (a cap taken from 2x V100 data)?
+
+**Setup.** Everyday dual config (Maya-M pack, auto split K=24, build `3f2ce224`) with only `--prefill` changed. Code read first: no fixed-8192 buffer overflows at 16384. ABBA, fresh server per cell, frozen usage, greedy, `cache_n 0` on all 24 requests, ~8K / ~16K / ~32K prompts.
+
+**Result.** Prompt tok/s (means of 4) 8192 -> 16384: 8K 689.1 -> 692.4 (+0.47%); 16K 908.0 -> 788.5 (-13.17%); 32K 1072.0 -> 994.5 (-7.23%). Peak VRAM unchanged (the bigger borrow evicts pool slots); no OOM.
+
+**Decision.** NO-ADOPT: keep the auto 8192 chunk on multi-GPU splits; do not raise the split auto cap. No Maya code changed.
+
+**Caveats.** Byte identity cannot be evaluated (greedy output differs across fresh loads within one arm, as in E121); 2 cells per arm; 24576 not run. Report: `results/ds-local-dual-chunkcap.md`.
+
+### E125 - PerfOpt kernel 71-minute GPU (Maya-S multi-turn) + NPU (gufo bfp8 GEMM) soak (MEASURED: kernel-level STABLE; 0 MCE / amdxdna / amdgpu / IOMMU error lines)
+
+**Question.** Is the PerfOpt kernel stable under a long combined GPU + NPU load?
+
+**Setup.** 7.3.0-rc6-perfopt+, `iommu=pt`, fclk held 2000 MHz, BIOS Performance, NPU pmode performance, 71 min wall. GPU: Maya-S 8-turn conversation, greedy. NPU: gufo GEMM loop overlapped the first 64.5 min (129 x 30 s blocks).
+
+**Result.** 0 kernel-log lines of Hardware Error / Machine check / amdxdna error or timeout / amdgpu fault, timeout or reset / AMD-Vi event / IO_PAGE_FAULT (polled every 60 s). NPU verify PASS at start and end; NPU ~21.0-21.3 TFLOPS flat under load (27.5 alone). GPU prompt 205 -> 320-349 tok/s at 9K-85K prompts, decode ~25 tok/s, no HTTP or engine errors.
+
+**Decision.** Kernel verdict: STABLE. The turns 3 and 5-8 digit-split output defect was investigated separately and traced to a stale serve layer (E126-E128), not the kernel or NPU.
+
+**Caveats.** The NPU loop budget ended ~6.5 min before the soak (the watcher never relaunched it); one soak. Report: `results/ds-nimo-perfopt-soak.md`.
+
+### E126 - Local R9700 replay of the nimo multi-turn digit-split (CLEAN-LOCALLY: 0 splits on the exact turn-3 request, fresh or over a cached prefix)
+
+**Question.** Is the newline inserted between adjacent digits (seen on nimo) a Maya-S IQ2_XXS / MTP / long-context defect, or nimo-specific?
+
+**Setup.** Fresh server per arm, R9700 alone, Maya-S pack, greedy, `cache_n 0`, the exact soak turn-3 messages (17657 prompt tokens), 16000 max tokens. MTP arms on `maya-pr96` v1.0.30 with `STRATA_GLM_MTP_DRAFT=3`; a spec-off control on `maya-pr146`; a faithful 3-turn incremental soak (cache_n 563 then 7740).
+
+**Result.** MTP on: 0 splits, 468 intact multi-digit runs, MTP accept 93.2%; repeat: 0 splits, accept 95.6%; incremental turn 3 (cache_n 7740): 0 splits, accept 96.1%. Spec-off control: 1 split in 16000 tokens. nimo turn 3 for comparison: 476 splits, 6 intact, MTP accept 88.0%.
+
+**Decision.** Not a general Maya-S / MTP / long-context defect; the evidence pointed at nimo's host, resolved in E127.
+
+**Caveats.** One fresh replay per arm cannot sample an intermittent trigger; the local engine is not nimo's exact build; the R9700 is a different ISA with no unified memory or NPU traffic. Report: `results/ds-local-digitsplit-replay.md`.
+
+### E127 - nimo digit-split root cause: the everyday server ran a stale Python tokenizer layer (FIXED (root cause): stale project-maya serve layer without the glm4 pre-tokenizer; not MTP, cache, NPU or kernel)
+
+**Question.** Why did the nimo soak output split multi-digit numbers (`100%` -> `1\n0%`)?
+
+**Setup.** Fresh everyday-config servers (same exe, pack, MTP, greedy, `cache_n 0`) with the Python serve layer from either the stale project-maya tree or the exe's own tree (`maya-verify-fuse`, v1.0.32). Arms: A, D (cached), C (NPU loop), E (cache + NPU), plus the stale layer with and without MTP.
+
+**Result.** The soak server ran `serve.server` from a tree whose tokenizer lacks `Tokenizer.from_dir`, so it used the default qwen35 pre-tokenizer and ignored the pack's glm4 pre-pattern: numbers tokenize one digit per token, and the replay prompt is 18590 tokens instead of 17657. Stale layer: 228 splits (MTP on), 490 splits with `STRATA_GLM_NO_SPEC=1` (MTP not involved). The `maya-verify-fuse` layer: 0 splits in all four arms (A 0/760 intact, D 0/451, C 0/472, E 0/756).
+
+**Decision.** Fix by launching the Python layer from `maya-verify-fuse` (or backport `Tokenizer.from_dir`); engine, exe and config unchanged.
+
+**Caveats.** One fresh replay per arm cannot sample the soak's intermittent per-turn flips; early stops make split counts not directly comparable to the soak. Report: `results/ds-nimo-digitsplit-diag.md`.
+
+### E128 - nimo digit-split fix applied: launchers now use the verify-fuse serve layer (FIXED: replay prompt 18590 -> 17657 tokens (canonical))
+
+**Question.** Was the E127 root cause fixed in the launchers?
+
+**Setup.** The nimo launchers (everyday orchestrator, BIOS-power orchestrator, and the next-config results orchestrator) now run `serve.server` from `maya-verify-fuse` (`Tokenizer.from_dir`, glm4 pre-tokenizer).
+
+**Result.** The replay prompt is the canonical 17657 tokens. Not MTP, cache, NPU or kernel.
+
+**Decision.** Past nimo serve-layer runs inflated prompt token counts on number-heavy text and could garble numbers in long prompts; tok/s A/Bs within the same layer remain valid.
+
+**Caveats.** Thin record; the evidence is E127. Report: `results/ds-nimo-digitsplit-diag.md`.
+
+### E129 - Strix NPU at decode-shaped work (M=1..16): can it take the MTP draft head off the GPU? (NO-GO (N10): NPU head ~21.8 ms scaled vs the GPU's ~1-2.9 ms)
+
+**Question.** Can the XDNA2 NPU run the MTP draft head faster than the GPU (NPU-TRACK N10/N19)?
+
+**Setup.** Open toolchain (mlir-aie 1.4.4 + Peano 22, bfp8). Placed design adapted to the smallest M the 8x4 topology allows (M=128 padded, K=4096, N=8192 slice; the whole N=98304 head overflowed core program memory). GPU baseline: Maya's own `glm_mv_bench --case head` (Q6_K 4096x154880) and a Q4_K copy. Concurrency proxy: a GPU memory load beside the NPU.
+
+**Result.** NPU slice 1.817 ms / 4.73 TFLOPS (0.59 TFLOPS per core); scaled to the whole head 21.8 ms, ~15-20x the GPU. GPU head: 2.33 / 2.46 / 2.87 ms at nt=1/4/8 (223 / 212 / 182 GB/s); Q4_K head 1.02 ms at M=1. Even a true 16-row tile is bound by streaming 404 MB of bfp8 weights vs the GPU Q4_K head's 217 MB (1.84 ms at 220 GB/s). Under GPU memory load the NPU took 1.804 ms vs 1.817 alone (compute-bound). GPU-side saving from the head GEMV is ~1.3% of decode.
+
+**Decision.** NO-GO on N10. N19 (the separate DFlash2 drafter, 14.88 ms/draft on the GPU) looks worse. No Maya code changed.
+
+**Caveats.** No true M<=16 AIE kernel exists in the toolchain; the whole-head build failed and was scaled linearly; the M=16 GPU row is extrapolated; contention used a proxy load. Report: `results/ds-nimo-npu-v1-drafthead.md`.
+
+### E130 - Strix NPU zero-copy (hipHostMalloc + XRT userptr BO) and async beside a real 32K GPU prefill (MEASURED: zero-copy verifies and async works; GPU cost at ~50% duty -3.7% misses the <3% gate (mechanism GO, N8 NO-GO as built))
+
+**Question.** Does a zero-copy, async NPU dispatch path cost the GPU less than the earlier synchronous loops (NPU-TRACK N7/N6 -> N8)?
+
+**Setup.** Standalone C++ harness replicating gufo's shared-buffer path (`hipHostMalloc` mapped, userptr BOs, 4 C buffers, up to 4 runs in flight) on gufo's shipped K=2560 xclbin. Contention against a fresh 32K everyday prefill under PerfOpt, fclk held, `cache_n 0`.
+
+**Result.** Verify PASS (max rel 1.03e-2) for host-encoded pages, GPU-written A and GPU-read C; `bo.sync(TO_DEVICE)` after a GPU write is required. NPU-alone 1/2/4 in flight 26.91 / 28.25 / 28.82 TFLOPS. GPU-alone 32K 389.2 tok/s (mean of 3); async x4 at 50% duty 375.8 / 373.7 (-3.7%); at 100% duty 349.8 (-10.1%), worse than the earlier synchronous loops (-5.2..-7.3%).
+
+**Decision.** Zero-copy and async are proven and reusable, but the 50%-duty GPU cost misses the <3% gate by ~0.6 pt. Follow up with a finer interleave or a lower-traffic kernel before any Maya N8 build.
+
+**Caveats.** 2 runs at 50% duty and 1 at 100%; one workload (K=2560) and one prompt shape; the earlier comparison used a pre-PerfOpt baseline and host-only BOs. Report: `results/ds-nimo-npu-v2-zerocopy.md`.
+
+### E131 - Strix NPU compiler gap: identify the compiler behind gufo's shipped 27.6-TFLOPS xclbin (NO-GO (N3): the open Peano path is capped ~18 TFLOPS; the shipped binary is most plausibly Chess-built)
+
+**Question.** Which compiler built gufo's shipped xclbin, and does an older open build close the 35-40% gap?
+
+**Setup.** `xclbinutil --info` on the shipped xclbin (no ELF or compiler banner recoverable from the CDO-encoded PDI); one older open build tried (llvm-aie 22.0.0.2026090701, the v1.4.3 pin) with the identical recipe; also the `--no-unified` lowering. Same-session NPU-alone bench, GPU idle.
+
+**Result.** Shipped 0.861 ms / 24.96 TFLOPS (same session; 27.6 canonical). Rebuilds: 1.4.4 + Peano 2026092101 `--unified` 17.82 TFLOPS; older Peano 2026090701 16.85; `--no-unified` 14.72. All verify PASS.
+
+**Decision.** NO-GO on N3 for the open toolchain; the shipped code quality is only plausibly produced by the proprietary Chess flow, absent here. A Peano 21.x + mlir-aie 1.4.2 run is a low-odds residual lead.
+
+**Caveats.** The shipped compiler could not be positively identified; NPU-alone medians are noisy on this box; only one older pin was tried. Report: `results/ds-nimo-npu-v3-compiler.md`.
+
+### E132 - Strix NPU viability for the GLM DSA lightning indexer: share of long-context prefill and decode (CLOSED-no-go: indexer below the 10% gate at every phase (max 7.9% prefill at ~120K))
+
+**Question.** Is the DSA indexer a big enough share of GLM prefill/decode to be an NPU offload target (NPU-TRACK N20)?
+
+**Setup.** GPU-only phase profile (NPU untouched) with Maya's own profiler, everyday exe `6136fe7d`, `PREFILL_SUB=8192`, NO_SPEC, greedy, `cache_n 0`, one request per context.
+
+**Result.** Prefill `dsa_index`: 2.3% at ~32K (1959.6 ms), 4.3% at ~64K (7311.8 ms), 7.9% at ~120K (26611.2 ms). NO_SPEC decode `dsa_score_select`: 1.740 ms/tok (2.7% of wall) at ~32K, 2.802 (4.4%) at ~64K, 4.756 (7.3%) at ~120K. Decode shape is the tiny-M [32,128]x[128,P] product that E129 found unsuited to the NPU.
+
+**Decision.** NO-GO, park N20. Growth is ~linear in cached positions, so the indexer would only approach 10% near the 262K ceiling. No Maya or NPU change.
+
+**Caveats.** One request per context, 64 tokens; phase marks are stream intervals. Report: `results/ds-nimo-npu-v4-dsaindex.md`.
+
+### E133 - Strix NPU offload of GLM's KDA q/k/v projections overlapped with the GPU (N8) (NO-GO as built (-24.7% at 32K): a fixable tuning-table miss, NPU fully hidden)
+
+**Question.** Can the NPU compute part of every KDA layer's q/k/v rows while the GPU does the rest, for a +3% prefill gain?
+
+**Setup.** Opt-in `STRATA_NPU` build (`exp/npu-kda-split`, base `d119b72`, K=4096 bfp8 xclbin): `STRATA_GLM_NPU_KDA_FRAC=f` sends the last rows of every KDA q/k/v GEMM to the NPU, with E130's zero-copy/async path. Correctness over all 34 KDA layers; timing with a fresh everyday server per cell.
+
+**Result.** Correctness: rel_l2 1.2-1.3e-2 (bfp8 level), 0 non-finite; 64 greedy tokens coherent. One integration bug fixed (a partial last slice must be decoded full-M). 32K: FRAC 0 385.8 tok/s, f=0.2 277.4 (-28.1%), f=0.3 290.5 (-24.7%); 64K: FRAC 0 375.4, f=0.2 272.6, f=0.3 286.1. NPU per-call busy 8.1 / 15.7 ms with 0.00 ms join wait, so it is fully hidden. The N=7168 / 6144 GPU GEMMs miss the exact-N hipBLASLt table and fall back to untuned `cublasGemmEx`; with tuning off at 8K the split is +3.9%.
+
+**Decision.** NO-GO for the +3% gate as built; re-tune the partial shapes and re-measure (E134). The ideal ceiling for the q/k/v rows alone is ~+4.5% at 32K.
+
+**Caveats.** Only q/k/v offloaded; correctness is rel_l2 plus coherence, no KL/top-1 gate; one 64K cell; power not sampled. Report: `results/ds-nimo-npu-n8-proto.md`.
+
+### E134 - Strix NPU KDA q/k/v split re-measured with the partial-N hipBLASLt shapes tuned (N8b) (NO-GO at the +3% gate: +0.1% at 32K, +1.7% at 64K (marginal); parked)
+
+**Question.** Once the partial-N tuning miss from E133 is removed, does the q/k/v row-split reach +3%?
+
+**Setup.** Same build as E133. Tuned 14 f16 K=4096 shapes (N=7168 / 6144 at T 64..8192; all rel_l2 <= 1.3e-5). The table loader keeps only the first `:`-separated table, so the rows were concatenated with the everyday table (98 rows). Fresh server per cell, `cache_n 0`, greedy, 2 cells x 2 requests.
+
+**Result.** Fallbacks 0 at FRAC > 0. 32K: FRAC 0 385.6, f=0.2 380.0 (-1.4%), f=0.3 385.9 (+0.1%); 64K: FRAC 0 372.8, f=0.2 376.7 (+1.0%), f=0.3 379.0 (+1.7%). NPU still hidden (busy 8.0 / 15.5 ms per call). Tuner per-call GPU time at T=8192: N=8192 21.39 ms (untuned 106.09), N=7168 18.78 ms (-12.2%), N=6144 16.14 ms (-24.5%); predicted ~+2.5% gross, but the wall is flat.
+
+**Decision.** The -25..-28% in E133 was entirely the tuning-table miss. The single-GEMM q/k/v split is too small a share to pay for itself; do not build the quality gate on it. If the NPU line continues, offload more or bigger GEMMs (MLA, shared expert) and look for a lower-traffic kernel.
+
+**Caveats.** f=0.2 at 32K is within noise; coherence on 2 prompts only, no KL gate; power not sampled. Report: `results/ds-nimo-npu-n8b-tune.md`.
+
+### E135 - NPU model-fit outlook (speculative) (SPECULATIVE: analysis only, no run; large MoE caps at a few %, dense models are the likely fit)
+
+**Question.** Which models is an NPU prefill offload likely to help, given E129-E134?
+
+**Setup.** Analysis from the recorded NPU results; no run.
+
+**Result.** Large MoE (GLM, 321B) has a low dense-GEMM share (~18% of prefill on q/k/v), so the offload caps at a few %; N8 is parked. Predicted fits (a guess): dense 4B-32B models (+10-25% prefill), small hidden dimensions, encoders, and a side model beside Maya.
+
+**Decision.** Decision rule: take a GPU-only prefill profile first; more than 60% offloadable dense GEMM means prototype. New leads N22 (dense GEMM-share profile) and N23 (side-model device).
+
+**Caveats.** Speculative; the percentages are not measurements. Source: the NPU track notes (model-fit outlook).
+
+### E136 - Desk transfer study: gufo int8/WMMA prefill PRs vs GLM-5.3-Flash prefill (DESK: nothing transfers)
+
+**Question.** Do gufo's open int8 WMMA prefill PRs (#566 Q8 attention, #579 persistent Q8 staging) and v0.14.0 help Maya's GLM prefill on gfx1151 or gfx1201?
+
+**Setup.** Read-only review against Maya-pr146 prefill and the open PRs #98 / #113; no GPU.
+
+**Result.** #566's int8 WMMA QK/PV is within 3% of its own F16 staging (1394 vs 1438 tok/s at 12K, 1415 vs 1418 at 52K, 1331 vs 1369 at 158K); an independent reviewer measured both #566 paths 7-11% slower than main. #579's persistent F16 staging gives +3.7 / 3.8% (53K / 160K) but targets a dequantized mirror that GLM's MLA attention does not have (it reads int8 latents directly). Maya already owns the int8 wave32 WMMA primitive in fused MoE (#98) and f16 wmma2 attention (#113). v0.14.0 is component-cache wiring and a ROCm managed-alloc fallback, no prefill compute change.
+
+**Decision.** Nothing transfers. The top-ranked idea (int8-WMMA-QK attention) has ~0% expected gain and high effort; the decisive tests would be an int8-QK vs wmma2 attention kernel comparison at 32K and a prefill profile to bound attention's share.
+
+**Caveats.** Author numbers not reproduced; no GPU run. Report: `results/ds-desk-gufo-prefill.md`.
+
+### E137 - gfx1151 SDMA / interleaved-session crash check (gufo-org/gufo#569) (MEASURED: no fault reproduced at the load reached; the server serializes sessions)
+
+**Question.** Does Maya fault on gfx1151 under two interleaved serving clients, as reported for gufo (#569)?
+
+**Setup.** Arm A, default SDMA, fresh everyday exe/config copy (context 262144 unchanged). Two client threads cycling 2K / 6K / 12K / 24K distinct prompts, 64 greedy tokens, back-to-back, until 40 per client or ~35 min. `serve.server` runs one sequence at a time behind a FIFO (`total_slots=1`), so the two clients never overlap on the GPU.
+
+**Result.** 55 requests completed (28 + 27) in 2190.9 s, 0 request errors, server and engine alive throughout, 0 engine fault strings, 0 new kernel fault lines (one benign workqueue CPU-hog warning in `amdgpu_amdkfd_restore_userptr_worker`). Prefill 359.5 / 396.3 / 384.1 / 387.8 tok/s and decode 24.9 / 24.5 / 24.0 / 23.4 tok/s at 2K / 6K / 12K / 24K.
+
+**Decision.** Not reproduced at the load reached. Arm B (`HSA_ENABLE_SDMA=0`) not run per protocol; no change to SDMA settings is warranted. The literal question needs a multi-slot build or two engines on one GPU.
+
+**Caveats.** The gufo cross-session interleave was not produced at the GPU level; only one engine fit in RAM headroom; Arm B's speed cost is unmeasured. Report: `results/ds-nimo-sdma-interleave.md`.
