@@ -3484,6 +3484,15 @@ def write_config_ds4(a, pc: dict, meta: dict, pack: Path, ctx: int, models: Path
     kept = keep_args(old.get("args") or [], args, ("--tp", "--prefill-chunk", "--reserve-mib", "--vram-experts",
                                                     "--cpu-threads", "--threads", "--dspark", "--dspark-conf",
                                                     "--expert-profile"))
+    # Linux HIP: a single card (or Maya-S's unsplittable 256-value expert blocks) cannot use TP=2.
+    # Keep CUDA's route unchanged until its greedy-token check has covered chunked prompts too.
+    gpus = pc["gpus"]
+    no_pair = len({round(g["vram_gb"]) for g in gpus}) == len(gpus)
+    if hip and not WIN and (no_pair or quant == "maya-s"):
+        if "--threads" not in args:
+            args += ["--threads", "on"]
+        if "--prefill-chunk" not in args:
+            args += ["--prefill-chunk", "8192"]
     if vision is None:                   # (a GGUF has none of its own: vision_pack.py's, when the pack has it)
         vision = quant == "exl3" or ds4_pack_has_vision(pack)
     if a.no_vision or not vision:
