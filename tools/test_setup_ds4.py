@@ -119,6 +119,46 @@ class Config(unittest.TestCase):
                          ("max", {"temperature": 0.6}, "0.0.0.0", "k"))
         self.assertEqual(c["env"], {"DS4_RING_MB": "800", "DS4_CHUNK_MIN": "256"})
 
+    def hip_args(self, gpus, quant, old=None):
+        if old is not None:
+            (self.root / "maya-ds4-hip.json").write_text(json.dumps(old))
+        pc = {"backend": "hip", "gpus": gpus}
+        p = maya.write_config_ds4(args(backend="hip"), pc, {}, Path("/m/H/maya-ds4"), 65536, Path("/models"),
+                                  Path("/m/H"), quant)
+        return json.loads(p.read_text())["args"]
+
+    @unittest.skipIf(maya.WIN, "Linux HIP only")
+    def test_hip_one_gpu_chunks_prompts(self):
+        a = self.hip_args([{"index": 0, "vram_gb": 32.0}], "gguf-q8")
+        self.assertEqual(a[a.index("--threads") + 1], "on")
+        self.assertEqual(a[a.index("--prefill-chunk") + 1], "8192")
+
+    @unittest.skipIf(maya.WIN, "Linux HIP only")
+    def test_hip_equal_pair_keeps_tp(self):
+        a = self.hip_args([{"index": 0, "vram_gb": 32.0}, {"index": 1, "vram_gb": 31.9}], "gguf-q8")
+        self.assertNotIn("--threads", a)
+        self.assertNotIn("--prefill-chunk", a)
+
+    @unittest.skipIf(maya.WIN, "Linux HIP only")
+    def test_hip_maya_s_pair_chunks_prompts(self):
+        a = self.hip_args([{"index": 0, "vram_gb": 32.0}, {"index": 1, "vram_gb": 32.0}], "maya-s")
+        self.assertEqual(a[a.index("--threads") + 1], "on")
+
+    @unittest.skipIf(maya.WIN, "Linux HIP only")
+    def test_hip_keeps_saved_threads_off(self):
+        old = {"args": ["--pack", "/old/maya-ds4", "--max-context", "65536", "--tp", "2", "--threads", "off"]}
+        a = self.hip_args([{"index": 0, "vram_gb": 32.0}], "gguf-q8", old)
+        self.assertEqual(a[a.index("--threads") + 1], "off")
+        self.assertEqual(a[a.index("--prefill-chunk") + 1], "8192")
+
+    def test_cuda_unchanged_without_vram(self):
+        pc = {"gpus": [{"index": 0}]}
+        p = maya.write_config_ds4(args(), pc, {}, Path("/m/C/maya-ds4"), 65536, Path("/models"), Path("/m/C"),
+                                  "maya-s")
+        a = json.loads(p.read_text())["args"]
+        self.assertNotIn("--threads", a)
+        self.assertNotIn("--prefill-chunk", a)
+
     def test_gguf_config(self):
         pc = {"gpus": [{"index": 0}]}
         p = maya.write_config_ds4(args(), pc, {}, Path("/m/G/maya-ds4"), 65536, Path("/models"), Path("/m/G"),
